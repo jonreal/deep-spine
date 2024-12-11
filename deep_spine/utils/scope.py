@@ -14,56 +14,49 @@ import fcntl, os
 
 
 class VerticalStackPlot:
-    def __init__(self, num_plots, buffer_size, dt, ylim=None, labels=None):
-        self.fig, self.axes = plt.subplots(
-            num_plots, 1, figsize=(15, 8), sharex=True
-        )
-        self.lines = []  # Store Line2D objects
-        self.t = np.linspace(0, buffer_size * dt, buffer_size)  # Shared x-axis
-        self.ylim = ylim or [(-1, 1)] * num_plots  # Default ylim if not provided
-
-        if num_plots == 1:  # Handle case for single plot
-            self.axes = [self.axes]
-
-        for i, ax in enumerate(self.axes):
-            line, = ax.plot(self.t, np.zeros_like(self.t))  # Initialize with zeros
-            self.lines.append(line)
-
-            # Set static axis properties
-            ax.set_ylim(self.ylim[i])
-            if labels:
-                ax.set_ylabel(labels[i])
-            ax.axhline(0, color='k', linestyle='-', linewidth=0.5)
-
-        self.axes[-1].set_xlabel("time (s)")
-        plt.tight_layout()
-        plt.ion()  # Enable interactive mode
-
-    def update(self, data_buffer):
-        for i, line in enumerate(self.lines):
-            line.set_ydata(data_buffer[i])
-
-            # Dynamically adjust ylim if necessary
-            data_min, data_max = np.min(data_buffer[i]), np.max(data_buffer[i])
-            if data_min < self.ylim[i][0] or data_max > self.ylim[i][1]:
-                self.ylim[i] = (min(data_min, self.ylim[i][0]),
-                                max(data_max, self.ylim[i][1]))
-                self.axes[i].set_ylim(self.ylim[i])
-
-        self.fig.canvas.draw()
-        self.fig.canvas.flush_events()
-
-def plot_vertical_stack(
-    fig = None,
-    figsize = (15,8),
-    data = None,
-    data_str = None,
-    start_index = None,
-    end_index = None,
-    ylim = None
+    def __init__(
+        self,
+        figsize = (5,8),
+        buffer_size = 100,
+        trace_list = None,
+        data_str = None,
+        start_index = None,
+        end_index = None,
+        ylim = None
     ):
 
-    def linkx():
+        plt.rcParams['lines.linewidth'] = 0.5
+        self.fig = plt.figure(figsize=figsize)
+
+        num_plots = len(trace_list)
+        outer_grid = gridspec.GridSpec(
+            num_plots, 1, height_ratios=[1] * num_plots
+        )
+
+        dt = 1/200
+        t = np.arange(0, buffer_size * dt, dt)
+
+        for i, traces in enumerate(trace_list):
+            ax = plt.Subplot(self.fig, outer_grid[i])
+            self.fig.add_subplot(ax)
+            d = np.zeros((buffer_size, traces))
+            ax.plot(t,d)
+            ax.axhline(y = 0, color = 'k', linestyle = '-')
+            if end_index:
+                plt.xlim(win[0],win[1])
+            if ylim:
+                if len(ylim) != 1:
+                    plt.ylim(ylim[i][0],ylim[i][1])
+                else:
+                    plt.ylim(ylim[0][0],ylim[0][1])
+            if data_str:
+                plt.ylabel(data_str[i])
+            ax.spines['bottom'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.set_xticks([])
+            ax.set_xlabel('')
+
         axes = plt.gcf().axes
         parent = axes[0]
         for i in range(1,len(axes)):
@@ -71,58 +64,56 @@ def plot_vertical_stack(
         for ax in axes[:-1]:
             ax.tick_params(bottom=False, labelbottom=False)
 
-    def ax_style(ax):
-        ax.spines['bottom'].set_visible(False)
+        plt.xlabel('time (s)')
+        num_digits = len(str(int(t[-1])))
+        scale = 10 ** (num_digits - 1)
+        ax.set_xticks(np.arange(0, t[-1] + scale, scale))
         ax.spines['top'].set_visible(False)
         ax.spines['right'].set_visible(False)
-        ax.set_xticks([])
-        ax.set_xlabel('')
+        ax.spines['bottom'].set_visible(True)
 
-    win = [start_index, end_index]
-    if fig is None:
-        plt.rcParams['lines.linewidth'] = 0.5
-        fig = plt.figure(figsize=figsize)
+        self.fig.tight_layout()
+        #self.fig.canvas.flush_events()
 
-    n = len(data)
-    outer_grid = gridspec.GridSpec(
-        n, 1, height_ratios=[1] * n
-    )
-    dt = 1/200
-    N = data[0].shape[0]
-    t = np.arange(0, N * dt, dt)
+        self.start_time = time.time()
+        self.last_time = self.start_time
+        self.frame_count = 0
 
-    for i, d in enumerate(data):
-        ax = plt.Subplot(fig, outer_grid[i])
-        fig.add_subplot(ax)
-        if (len(t) != len(d)):
-            continue
-        ax.plot(t,d)
-        ax.axhline(y = 0, color = 'k', linestyle = '-')
-        if end_index:
-            plt.xlim(win[0],win[1])
-        if ylim:
-            if len(ylim) != 1:
-                plt.ylim(ylim[i][0],ylim[i][1])
-            else:
-                plt.ylim(ylim[0][0],ylim[0][1])
-        if data_str:
-            plt.ylabel(data_str[i])
-        ax_style(ax)
+    def update(self, data):
+        now = time.time()
+        for i, d in enumerate(data):
+            ax = self.fig.axes[i]
+            num_traces = d.shape[1]
 
-    linkx()
+            max_in_buffer = -np.inf
+            min_in_buffer = np.inf
 
-    plt.xlabel('time (s)')
-    num_digits = len(str(int(t[-1])))
-    scale = 10 ** (num_digits - 1)
-    ax.set_xticks(np.arange(0, t[-1] + scale, scale))
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(True)
+            for j in range(num_traces):
+                line = ax.lines[j]
+                old_ydata = line.get_ydata()
 
+                # Efficient buffer update
+                new_ydata = np.roll(old_ydata, -d.shape[0])
+                new_ydata[-d.shape[0]:] = d[:, j]
+                line.set_ydata(new_ydata)
 
-    fig.tight_layout()
-    plt.show()
-    return fig
+                # Efficient min/max calculations
+                max_in_buffer = max(max_in_buffer, new_ydata.max())
+                min_in_buffer = min(min_in_buffer, new_ydata.min())
+
+            ax.set_ylim(min(min_in_buffer * 1.1, 0), max_in_buffer * 1.1)
+
+        self.fig.canvas.draw_idle()
+        #self.fig.canvas.flush_events()
+
+        if now - self.last_time > 10:
+            print(
+                    f"Rate: {self.frame_count/(now - self.last_time):.2f} fps, "
+                    f"Elapsed time: {now - self.start_time:.2f} s"
+            )
+            self.last_time = now
+            self.frame_count = 0
+        self.frame_count += 1
 
 def get_sorted_files(prefix):
     # Extract directory and prefix
@@ -197,26 +188,36 @@ class Scope:
             with open(config, 'r') as f:
                 self.config = json.load(f)
         self.datasize = 0
+        trace_list = []
         for key, value in self.config.items():
             self.datasize += value
+            trace_list.append(value)
 
         self.data = np.empty((0,self.datasize))  # Assuming 132 columns in data
 
         # Set up the plot
-#        plt.rcParams['lines.linewidth'] = 0.5
-        self.stack_plot = VerticalStackPlot(
-            num_plots=len(self.config),
+        plt.ion()  # Enable interactive mode for real-time plotting
+        plt.rcParams['lines.linewidth'] = 0.5
+        #self.fig = plt.figure(figsize=(5,8))
+
+        self.plot = VerticalStackPlot(
+            trace_list=trace_list,
+            data_str=list(self.config.keys()),
             buffer_size=self.buffer_size,
-            dt=0.005,
-            ylim=[(-1, 1)] * len(self.config),
-            labels=list(self.config.keys())
         )
+
+        #self.plot = VerticalStackPlot(
+        #    num_plots=len(self.config),
+        #    buffer_size=self.buffer_size,
+        #    dt=0.005,
+        #    ylim=[(-1, 1)] * len(self.config),
+        #    labels=list(self.config.keys())
+        #)
 
         if self.save_frames_to_path:
             self._initialize_video_writer()
             self.data_files = get_sorted_files(self.prefix)
-        print(self.config.keys())
-        exit()
+
         self.run(interval=0.1)
 
     def detect_file_change(self):
@@ -319,16 +320,16 @@ class Scope:
         """
         Clears and redraws the plot with the updated data.
         """
-        self.fig.clf()
+        self.plot.fig.clf()
         data, data_str = self.data_parser(self.data)
-        plot_vertical_stack(self.fig, data=data, data_str=data_str)
+        plot_vertical_stack(self.plot.fig, data=data, data_str=data_str)
         plt.draw()
         plt.pause(0.1)
 
     def _initialize_video_writer(self):
         os.makedirs(os.path.dirname(self.save_frames_to_path), exist_ok=True)
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        width, height = int(self.fig.bbox.width), int(self.fig.bbox.height)
+        width, height = int(self.plot.fig.bbox.width), int(self.plot.fig.bbox.height)
         self.video_writer = cv2.VideoWriter(
             f"{self.save_frames_to_path}.mp4",
             fourcc, 100.0, (width, height)
@@ -336,6 +337,7 @@ class Scope:
 
 
     def run(self, interval=0.5):
+        plt.ion()  # Enable interactive mode
         if self.plot_trial:
             self.plot_whole_file()
             return
@@ -368,9 +370,6 @@ class Scope:
         plt.ioff()  # Disable interactive mode
         plt.show()  # Show the plot window
 
-    def make_video_from_data_files(self):
-        print("Plotting the whole file...")
-        print(self.data_files)
 
     def make_video_from_data_files(self, interval_factor=10):
         if not self.data_files:
@@ -400,17 +399,23 @@ class Scope:
                             self.update_data(row)
 
                             # Determine if this time step should produce a frame
-                            if current_time_step % interval_factor == 0:
+                            if (
+                                (current_time_step != 0)
+                                and (current_time_step % interval_factor == 0)
+                            ):
                                 # Redraw plot
-                                self.redraw_plot()
+                                data, data_str = self.data_parser(self.data)
+                                self.plot.update(data)
+
+                                #self.redraw_plot()
                                 # Capture the frame from the plot
-                                self.fig.canvas.draw()
+                                self.plot.fig.canvas.draw()
                                 frame = np.frombuffer(
-                                    self.fig.canvas.tostring_rgb(),
+                                    self.plot.fig.canvas.tostring_rgb(),
                                     dtype=np.uint8
                                 )
                                 frame = frame.reshape(
-                                    self.fig.canvas.get_width_height()[::-1]
+                                    self.plot.fig.canvas.get_width_height()[::-1]
                                     + (3,)
                                 )
                                 # Write the frame to the video
