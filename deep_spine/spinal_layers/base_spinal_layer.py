@@ -2,126 +2,88 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import signal
 from gymnasium import spaces
+import sys
 
 import deep_spine.spinal_layers.filters.iir as iir
+
+def normalize_length(length, min_length, max_length):
+    return max(
+        0,
+        min(1, (length - min_length) / (max_length - min_length))
+    )
+def normalize_velocity(velocity, min_length, max_length):
+    return velocity / (max_length - min_length)
 
 class BaseSpinalLayer:
     def __init__(
         self,
-        afferent_mode = 'len-vel',
         decimation_factor = 1,
-        afferent_filter_cutoff = None
+        mechanics_filter_cutoff = None
     ):
         self.decimation_factor = decimation_factor
+        self.mechanics_filter_cutoff = mechanics_filter_cutoff
         self.simulation_frame_count = 1
-        self.afferent_mode = afferent_mode
-        self.afferent_filter_cutoff = afferent_filter_cutoff
 
-        self.n = None
-        self.min_length = None
-        self.max_length = None
-        self.afferent_signals = None
-        self.afferent_filters = None
-        self.integrate_afferent_signals = None
-        self.afferent_space = None
-        self.efferent_signals = None
-        self.efferent_space = None
-        self.activations = None
-
-    def initialize_motor_units(self, num_motor_units, lengthrange) -> None:
-        self.n = num_motor_units
+    def initialize(self, model) -> None:
+        self.n = model.na
+        lengthrange = model.actuator_lengthrange
         self.min_length = lengthrange[0:self.n,0]
         self.max_length = lengthrange[0:self.n,1]
 
-        self.afferent_signals = self._initialize_afferent_signals()
-        self.afferent_filters = self._initialize_afferent_filters()
-        self.integrate_afferent_signals = self._initialize_afferent_integrator()
-        self.afferent_space = self._initialize_afferent_space()
+        # the raw 'sensor' signals
+        self.length = np.zeros(self.n)
+        self.velocity = np.zeros(self.n)
+        self.force = np.zeros(self.n)
 
-        self.efferent_signals = self._initialize_efferent_signals()
-        self.efferent_space = self._initialize_efferent_space()
+        self.activation = np.zeros(self.n) # current activation of muscles
+        self.drive = np.zeros(self.n) # descending drive to muscles
 
-    def _initialize_afferent_signals(self) -> np.ndarray:
-        if self.afferent_mode in ('len-vel'):
-            return np.zeros(2*self.n)
-
-    def _initialize_afferent_filters(self):
-        num_filters = (
-            2*self.n if self.afferent_mode in ('len-vel')
-                else self.n
+        b, a = (
+            signal.butter(1, self.mechanics_filter_cutoff, 'low')
+            if self.mechanics_filter_cutoff else (None, None)
         )
-        cutoff = self.afferent_filter_cutoff
-        b, a = signal.butter(1, cutoff, 'low') if cutoff else (None, None)
-        return [iir.IirFilt(b, a) for _ in range(num_filters)]
+        self.mechanics_filters = [iir.IirFilt(b, a) for _ in range(3*self.n)]
 
-    def _initialize_afferent_integrator(self):
-        integrator = {
-            'len-vel': self._integrate_length_velocity_afferents,
-        }
-        try:
-            return integrator[self.afferent_mode]
-        except KeyError:
-            raise ValueError(f"Invalid afferent mode: {afferent_mode}.")
+        self.initialize_layers()
 
-    def _initialize_afferent_space(self):
-        if self.afferent_mode == 'len-vel':
-            return spaces.Box(
-                low=np.concatenate(
-                    (np.zeros(self.n,),
-                    -5*np.ones(self.n))
-                ),
-                high=np.concatenate(
-                    (np.ones(self.n,),
-                     5*np.ones(self.n))
-                ),
-                dtype=np.float32
-            )
-
-
-    def _integrate_length_velocity_afferents(self, data):
-        self.afferent_signals[:self.n] = [
-            f.filter(length / max_length) for f, length, max_length in (
-                zip(
-                    self.afferent_filters[:self.n],
-                    data.actuator_length,
-                    self.max_length
+    def _sample_mechanics(self, data):
+        for i in range(self.n):
+            self.length[i] = self.mechanics_filters[i].filter(
+                normalize_length(
+                    data.actuator_length[i],
+                    self.min_length[i],
+                    self.max_length[i]
                 )
             )
-        ]
-        self.afferent_signals[self.n:] = [
-            f.filter(velocity / max_length) for f, velocity, max_length in (
-                zip(
-                    self.afferent_filters[self.n:],
-                    data.actuator_velocity,
-                    self.max_length
+            self.velocity[i] = self.mechanics_filters[i+self.n].filter(
+                normalize_velocity(
+                    data.actuator_velocity[i],
+                    self.min_length[i],
+                    self.max_length[i]
                 )
             )
-        ]
+            self.force[i] = self.mechanics_filters[i+2*self.n].filter(
+                data.actuator_force[i]
+            )
+            self.activation[i] = data.act[i]
 
     def callback(self, model, data) -> None:
         if (self.simulation_frame_count == self.decimation_factor
             or data.time == 0.0
         ):
             # Activate muscles
-            data.ctrl[:self.n] =  self._synaptic_integration(data)
+            data.ctrl[:self.n] = self.forward(data)
             self.simulation_frame_count = 1
         else:
             self.simulation_frame_count += 1
 
-    @abstractmethod
-    def _synaptic_integration(self, model, data) -> None:
-        """ Dyanamics of the spinal network """
+    def set_descending_drive(self, drive) -> None:
+        self.drive = drive
 
     @abstractmethod
-    def set_efferent_signals(self, new_efferent_signals) -> None:
-        """ set_action """
+    def initialize_layers(self) -> None:
+        raise NotImplementedError("missing 'initialize_layers' method")
 
     @abstractmethod
-    def _initialize_efferent_signals(self) -> np.ndarray:
-        """ Initialize efferent signals """
-
-    @abstractmethod
-    def _initialize_efferent_space(self) -> spaces.Box:
-        """ Initialize efferent space """
-
-
+    def forward(self, model, data) -> None:
+        raise NotImplementedError("missing 'forward' method")

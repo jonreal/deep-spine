@@ -1,0 +1,13 @@
+{
+    "qpos": 2,
+    "qvel": 2,
+    "length": 6,
+    "velocity": 6,
+    "force": 6,
+    "II": 6,
+    "Ia": 6,
+    "babble": 6,
+    "aMN": 6,
+    "muscle": 6,
+    "activation": 6
+}

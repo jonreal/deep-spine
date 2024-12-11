@@ -1,5 +1,6 @@
 import sys, os, pickle
 import numpy as np
+import torch
 import pandas as pd
 from matplotlib import pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -313,6 +314,170 @@ def plot_arm26_trial(
     plt.show()
 
 
+def linkx():
+    axes = plt.gcf().axes
+    parent = axes[0]
+    for i in range(1,len(axes)):
+        axes[i].sharex(parent)
+    for ax in axes[:-1]:
+        ax.tick_params(bottom=False, labelbottom=False)
+
+def plot_vertical_stack(
+    fig = None,
+    figsize = (15,8),
+    data = None,
+    data_str = None,
+    start_index = None,
+    end_index = None,
+    ylim = None
+    ):
+
+    def ax_style(ax):
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.set_xticks([])
+        ax.set_xlabel('')
+
+    n = len(data)
+    win = [start_index, end_index]
+    if fig is None:
+        plt.rcParams['lines.linewidth'] = 0.5
+        fig = plt.figure(figsize=figsize)
+
+    outer_grid = gridspec.GridSpec(
+        n, 1, height_ratios=[1] * n
+    )
+    dt = 1/200
+    N = data[0].shape[0]
+    t = np.arange(0, N * dt, dt)
+
+    for i, data in enumerate(data):
+        ax = plt.Subplot(fig, outer_grid[i])
+        fig.add_subplot(ax)
+        ax.plot(t,data)
+        ax.axhline(y = 0, color = 'k', linestyle = '-') 
+        if end_index:
+            plt.xlim(win[0],win[1])
+        if ylim:
+            if len(ylim) != 1:
+                plt.ylim(ylim[i][0],ylim[i][1])
+            else:
+                plt.ylim(ylim[0][0],ylim[0][1])
+        plt.ylabel(data_str[i])
+        ax_style(ax)
+
+    linkx()
+
+    plt.xlabel('time (s)')
+    num_digits = len(str(int(t[-1])))
+    scale = 10 ** (num_digits - 1)
+    ax.set_xticks(np.arange(0, t[-1] + scale, scale))
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(True)
+
+
+    fig.tight_layout()
+    plt.show()
+    return fig
+
+
+def plot_heb_trial(
+        filename,
+        start_index: int = 0,
+        end_index = None,
+    ):
+
+    def ax_style(ax):
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.set_xticks([])
+        ax.set_xlabel('')
+
+    d = np.loadtxt(filename, delimiter=',')
+    N = d.shape[0]
+    dt = 1/200
+    t = np.arange(0, N * dt, dt)
+    p_pre = d[:,:6]
+    p_post = d[:,6:12]
+    hp_p_post = d[:,12:18]
+    mean_p_post = d[:,18:24]
+    outer_product = d[:,24:60]
+    weighted_outer_product = d[:,60:96]
+    learning_signal = d[:,96:132]
+    compensation = d[:,132:168]
+    rate = d[:,168:204]
+
+    plot_vertical_stack(
+        data = [p_pre, p_post, hp_p_post, mean_p_post,
+        ],
+        data_str = ['p_pre', 'p_post', 'hp_p_post', 'mean_p_post',
+        ],
+        start_index = start_index,
+        end_index = end_index
+    )
+    plot_vertical_stack(
+        data = [learning_signal, compensation, rate, 
+        ],
+        data_str = ['outer_product', 'weighted_outer_product',
+                    'learning_signal', 'compensation', 'rate'
+        ],
+        start_index = start_index,
+        end_index = end_index
+    )
+
+
+def plot_arm26babble_trial(
+        filename,
+        start_index: int = 0,
+        end_index = None,
+    ):
+
+    def ax_style(ax):
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.set_xticks([])
+        ax.set_xlabel('')
+
+    d = np.loadtxt(filename, delimiter=',')
+    time = d[:,0]
+    qpos = d[:,1:3]
+    qvel = d[:,3:5]
+    length = d[:,5:11]
+    velocity = d[:,11:17]
+    activation_II = d[:,17:23]
+    activation_Ia = d[:,23:29]
+    activation_MN = d[:,29:35]
+    activation_muscle = d[:,35:41]
+    descending_drive = d[:,41:47]
+
+    plot_vertical_stack(
+        data = [qpos, qvel],
+        data_str = ['qpos', 'qvel'],
+        start_index = start_index,
+        end_index = end_index
+    )
+
+    plot_vertical_stack(
+        data = [length, velocity,
+                activation_II, activation_Ia,
+                activation_MN, activation_muscle,
+                descending_drive
+        ],
+        data_str = ['length', 'velocity',
+                    'II', 'Ia',
+                    'MN', 'muscle activation',
+                    'babble'
+        ],
+        start_index = start_index,
+        end_index = end_index,
+        ylim = [[0,1],[-2,2],[0,1],[0,1],[0,1],[0,1],[0,1]]
+    )
+
+
 def plot_df_performance_index(df,value_string):
   eps_df = df[df['Tag'] == 'eps/eps'].reset_index(drop=True)
   value_df = df[df['Tag'] == value_string].reset_index(drop=True)
@@ -347,3 +512,81 @@ def plot_df_performance_index(df,value_string):
           )
   #display(plot)
 
+def plot_weights(W, fig=None, ax=None, im=None, save_dir="figures",
+                 title='Weights Matrix', mn_labels=None, ia_labels=None,
+                 scale_opt=None):
+
+    if mn_labels is None:
+        mn_labels = ['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
+    if ia_labels is None:
+        ia_labels = ['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE']
+    W = W.detach().cpu().numpy()
+    plt.ion()  # Turn on interactive mode
+    if fig is None or ax is None:
+        fig, ax = plt.subplots(figsize=(6, 4))
+
+        if scale_opt:
+            im = sns.heatmap(
+                W, annot=True, fmt='.2f',
+                cmap='coolwarm', center=0, vmin=-scale_opt,
+                vmax=scale_opt,
+                yticklabels=mn_labels, xticklabels=ia_labels, ax=ax)
+        else:
+            im = sns.heatmap(W, annot=True, fmt='.2f',
+                cmap='coolwarm', vmin=0, vmax=1,
+                yticklabels=mn_labels,
+                xticklabels=ia_labels, ax=ax)
+
+
+        ax.xaxis.tick_top()
+        ax.xaxis.set_label_position('top')
+        ax.set_title(title, pad=-50)
+    else:
+        # Remove the colorbar manually if it exists
+        if ax.collections:
+            for cbar in ax.collections:
+                if cbar.colorbar:
+                    cbar.colorbar.remove()
+        # Clear the previous heatmap
+        ax.clear()
+
+        if scale_opt:
+            im = sns.heatmap(
+                W, annot=True, fmt='.2f',
+                cmap='coolwarm', center=0, vmin=-scale_opt,
+                vmax=scale_opt,
+                yticklabels=mn_labels,
+                xticklabels=ia_labels, ax=ax, cbar=True)
+        else:
+            im = sns.heatmap(W, annot=True, fmt='.2f',
+                         cmap='coolwarm', vmin=0, vmax=1,
+                         yticklabels=mn_labels,
+                         xticklabels=ia_labels,
+                         ax=ax, cbar=True)
+        ax.xaxis.tick_top()
+        ax.xaxis.set_label_position('top')
+        ax.set_title(title, pad=-50)
+    plt.draw()
+    plt.pause(0.05)  # Pause to render the plot
+    plt.show()
+    plt.ioff()
+
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        files = os.listdir(save_dir)
+        existing_files = [
+            f for f in files if f.startswith("plot_") and f.endswith(".png")
+        ]
+        if existing_files:
+            # Extract numeric part from the filenames and find the max
+            existing_numbers = [
+                int(f.split('_')[1].split('.')[0]) for f in existing_files
+            ]
+            next_number = max(existing_numbers) + 1
+        else:
+            next_number = 1
+
+        filename = f"plot_{next_number:09d}.png"
+        save_path = os.path.join(save_dir, filename)
+        fig.savefig(save_path)
+    return fig, ax, im

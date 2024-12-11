@@ -5,193 +5,106 @@ from torch import nn
 import numpy as np
 from functools import partial
 
-from stable_baselines3 import PPO, SAC
-from stable_baselines3.common.policies import ActorCriticPolicy
-from stable_baselines3.common.distributions import (
-    Distribution,
-    DiagGaussianDistribution
-)
-from stable_baselines3.common.type_aliases import PyTorchObs, Schedule
-
+from deep_spine.spinal_layers.base_spinal_layer import BaseSpinalLayer
 from deep_spine.spinal_layers.spinal_layers import *
 
 class IaReflex(nn.Module):
     def __init__(
         self,
         num_motor_units = 6,
-        IIa_length_gain = 0,
-        IIa_bias = 0,
-        Ia_IIa_gain = 0,
-        Ia_bias = 0,
+        II_length_gain = 0,
+        II_bias = 0,
+        Ia_II_gain = 0,
         Ia_saturation_constant = 0,
-        Ia_velocity_bias = 0,
-        MN_bias = 0
+        Ia_velocity_gain = 0,
+        muscle_bias = 0,
+        muscle_gain = 0,
+        K = 0,
+        k_leak = 0.1,
+        W_Ia = None,
         ):
         super().__init__()
         self.n = num_motor_units
 
-        self.IIa = IIa(
+        self.II = II(
             self.n,
-            bias=IIa_bias,
-            length_gain=IIa_length_gain
+            bias=II_bias,
+            length_gain=II_length_gain
         )
         self.Ia = Ia(
             self.n,
-            IIa_gain=Ia_IIa_gain,
-            saturation_constant=Ia_saturation_constant
+            II_gain=Ia_II_gain,
+            saturation_constant=Ia_saturation_constant,
+            vel_gain=Ia_velocity_gain,
+            K=K
         )
         self.aMN = aMN(
             self.n,
-            bias=MN_bias
+            K=K,
+            k_leak=k_leak,
+            W_Ia=W_Ia,
+        )
+        self.muscle = Muscle(
+            self.n,
+            bias=muscle_bias,
+            gain=muscle_gain
         )
 
+    @torch.no_grad()
     def forward(self, features):
-        # Features: [length, velocity, a_MN, a_babble]
-        length = features[:,:self.n]
-        velocity = features[:,self.n:self.n*2]
-        activation_MN = features[:,self.n*2:self.n*3]
-        activation_babble = features[:,self.n*3:]
 
-        activation_IIa = self.IIa(length, activation_MN)
-        activation_Ia = self.Ia(velocity, activation_IIa, activation_MN)
-        activation_MN = self.aMN(activation_Ia, activation_babble)
+        # Features: [length, velocity, activation, descending_drive]
+        # Action: [act_Ia, act_aMN]
+        length = features[:self.n]
+        velocity = features[self.n:self.n*2]
+        activation = features[self.n*2:self.n*3]
+        drive = features[self.n*3:]
 
-        return torch.cat([activation_Ia, activation_MN], dim=1)
+        act_II = self.II(length, activation)
+        act_Ia = self.Ia(velocity, act_II, activation)
+        act_aMN = self.aMN(act_Ia, drive)
+        act_muscle = self.muscle(act_aMN)
 
-class IaReflexActorCritic(nn.Module):
+        return act_II, act_Ia, act_aMN, act_muscle
+
+class IaReflexSpinalLayer(BaseSpinalLayer):
     def __init__(
         self,
-        num_motor_units: int = 6,
-        IIa_length_gain: float = 0,
-        IIa_bias: float = 0,
-        Ia_IIa_gain: float = 0,
-        Ia_bias: float = 0,
-        Ia_saturation_constant: float = 0,
-        Ia_velocity_bias: float = 0,
-        MN_bias: float = 0,
-        nn_size_critic: int = 64,
+        **iareflex_kwargs
     ):
-        super().__init__()
+        base_args = {
+            key: iareflex_kwargs.pop(key) for key in [
+                'decimation_factor', 'mechanics_filter_cutoff'
+            ]
+        }
+        super().__init__(**base_args)
+        self.type = 'ia_reflex_spinal_layer'
+        self.kwargs = iareflex_kwargs
 
-        self.latent_dim_pi = 2*num_motor_units
-        self.latent_dim_vf = nn_size_critic
+    def initialize_layers(self):
+        self.net = IaReflex(num_motor_units=self.n, **self.kwargs)
 
-        self.policy_net = IaReflex(
-            num_motor_units=num_motor_units,
-            IIa_length_gain=IIa_length_gain,
-            IIa_bias=IIa_bias,
-            Ia_IIa_gain=Ia_IIa_gain,
-            Ia_bias=Ia_bias,
-            Ia_saturation_constant=Ia_saturation_constant,
-            Ia_velocity_bias=Ia_velocity_bias,
-            MN_bias=MN_bias
-        )
-        self.value_net = nn.Sequential(
-            nn.Linear(
-                4*num_motor_units,
-                nn_size_critic
-            ),
-            nn.Tanh(),
-            nn.Linear(nn_size_critic, nn_size_critic),
-            nn.Tanh()
-        )
+        self.act_II = np.zeros(self.n)
+        self.act_Ia = np.zeros(self.n)
+        self.act_aMN = np.zeros(self.n)
+        self.act_muscle = np.zeros(self.n)
 
-    def forward(
-        self,
-        features: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.forward_actor(features), self.forward_critic(features)
+    def forward(self, data) -> np.ndarray:
+        self._sample_mechanics(data)
 
-    def forward_actor(self, features: torch.Tensor) -> torch.Tensor:
-        return self.policy_net(features)
-
-    def forward_critic(self, features: torch.Tensor) -> torch.Tensor:
-        return self.value_net(features)
-
-class IaReflexPolicy(ActorCriticPolicy):
-    def __init__(
-        self,
-        observation_space: spaces.Space,
-        action_space: spaces.Space,
-        lr_schedule: Callable[[float], float],
-        num_motor_units: int = 6,
-        IIa_length_gain: float = 0,
-        IIa_bias: float = 0,
-        Ia_IIa_gain: float = 0,
-        Ia_bias: float = 0,
-        Ia_saturation_constant: float = 0,
-        Ia_velocity_bias: float = 0,
-        MN_bias: float = 0,
-        nn_size_critic: int = 64,
-        *args,
-        **kwargs
-    ):
-        self.num_motor_units = num_motor_units
-        self.IIa_length_gain = IIa_length_gain
-        self.IIa_bias = IIa_bias
-        self.Ia_IIa_gain = Ia_IIa_gain
-        self.Ia_bias = Ia_bias
-        self.Ia_saturation_constant = Ia_saturation_constant
-        self.Ia_velocity_bias = Ia_velocity_bias
-        self.MN_bias = MN_bias
-        self.nn_size_critic = nn_size_critic
-
-        # Disable orthogonal initialization
-        kwargs["ortho_init"] = False
-        super().__init__(
-            observation_space,
-            action_space,
-            lr_schedule,
-            # Pass remaining arguments to base class
-            *args,
-            **kwargs,
-        )
-        self.action_net = nn.Identity()
-
-    def _build_mlp_extractor(self) -> None:
-        self.mlp_extractor = IaReflexActorCritic(
-            num_motor_units=self.num_motor_units,
-            IIa_length_gain=self.IIa_length_gain,
-            IIa_bias=self.IIa_bias,
-            Ia_IIa_gain=self.Ia_IIa_gain,
-            Ia_bias=self.Ia_bias,
-            Ia_saturation_constant=self.Ia_saturation_constant,
-            Ia_velocity_bias=self.Ia_velocity_bias,
-            MN_bias=self.MN_bias,
-            nn_size_critic=self.nn_size_critic
+        features = np.concatenate(
+            [self.length, self.velocity, self.activation, self.drive]
         )
 
-#    def _predict(self, observation: torch.Tensor, deterministic: bool = False):
-#        distribution = self._get_action_dist_from_latent(
-#                self._get_latent(observation)
-#        )
-#        # Always use the mean action
-#        actions = distribution.mean
-#        print(f'actions: {actions}')
-#        return actions
-#    def forward(
-#        self,
-#        obs: torch.Tensor,
-#        deterministic: bool = False
-#    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-#        """
-#        Forward pass in all the networks (actor and critic)
-#
-#        :param obs: Observation
-#        :param deterministic: Whether to sample or use deterministic actions
-#        :return: action, value and log probability of the action
-#        """
-#
-#        features = self.extract_features(obs)
-#        latent_pi, latent_vf = self.mlp_extractor(features)
-#        values = self.value_net(latent_vf)
-#
-#        # Get the action distribution
-#        distribution = self._get_action_dist_from_latent(latent_pi)
-#        if deterministic:
-#            actions = distribution.mean
-#        else:
-#            actions = distribution.sample()
-#        log_prob = distribution.log_prob(actions).sum(dim=-1)
-#        actions = actions.reshape((-1, *self.action_space.shape))
-#        return actions, values, log_prob
+        #features = np.concatenate(
+        #    [self.length, self.velocity, self.act_muscle, self.drive]
+        #)
+
+        features = torch.tensor(features, dtype=torch.float32)
+
+        self.act_II, self.act_Ia, self.act_aMN, self.act_muscle = (
+            self.net.forward(features)
+        )
+
+        return self.act_muscle
+
