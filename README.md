@@ -31,7 +31,7 @@
     ```bash
     pip install -r requirements.txt
 
-Install deep_spine:
+4. Install deep_spine:
     ```bash
     pip install .
 
