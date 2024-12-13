@@ -27,10 +27,10 @@ env_scope_port =  8000
 scope_port = env_scope_port + 1
 
 frame_rate = 10
-log_top_dir = './logs/arm26-11-26-24/'
+log_top_dir = './logs/arm26-12-11-24/'
 
 options = {
-    'num_eps': 10,
+    'num_eps': 1,
     'eps_length': 900,
     'save_W_period': 30,
     'learning_rate': 10,
@@ -42,7 +42,7 @@ options = {
     'seed': 1,
     'damping': 0.5,
     'viscosity': 0,
-    'muscle_strength_factor': 0.7,
+    'muscle_strength_factor': 0.1,
     'muscle_increase_factor': 1,
     'babble_max_prob': 0.005,
     'hebbian_gain': 1,
@@ -89,6 +89,8 @@ env_kwargs = {
     #'xml_path': 'myo_sim/elbow/myoelbow_2dof6muscles.xml',
     'frame_rate': frame_rate,
     'save_frames_to_path': sim_animation,
+    'render_in_background': False,
+    'render_lossless': True,
     'task': 'babble',
     'path_to_logfile': sim_log,
     'scope_port': env_scope_port,
@@ -145,8 +147,6 @@ learner = HebbianLearner(
 
 udpcast = scope.ScopeBroadcaster(port=scope_port)
 
-filecast = scope.Scope
-
 simulation_timestep = env.model.opt.timestep
 env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
 env.model.opt.viscosity = options['viscosity']
@@ -182,10 +182,12 @@ env.reset()
 env.set_logfile(f'{sim_log}-{env.eps}')
 learner.set_logfile(f'{heb_log}-{env.eps}')
 muscle_strength_factor = options['muscle_strength_factor']
+steps_per_save = options['save_W_period']/simulation_timestep
+
+tprv = time.time()
 try:
     for _ in range(options['num_eps']):
         done = False
-        tprv = 0
         cnt = 0
         while not done:
             _, _, done, _, _ = env.step(action=None)
@@ -194,8 +196,9 @@ try:
                 post_synaptic=spinal_layer.act_aMN
             )
             udpcast.broadcast(learner.data_cache)
+            now = time.time()
             cnt += 1
-            if cnt % (options['save_W_period']/simulation_timestep) == 0:
+            if cnt % steps_per_save == 0:
                 print(
                     f'Eps: {int(env.eps)}, Time: {env.data.time:.1f} s,'
                     f'Muscle strength: {muscle_strength_factor}'
@@ -211,6 +214,10 @@ try:
                     spinal_layer.net.aMN.W_Ia - W_Ia0,
                     title=f'Eps: {int(env.eps)}, Time: {env.data.time:.1f} s'
                 )
+                print(f'sim-steps per sec: {steps_per_save / (now - tprv):.1f}')
+                print('---\n\n')
+                tprv = now
+
         env.set_logfile(f'{sim_log}-{env.eps}')
         learner.set_logfile(f'{heb_log}-{env.eps}')
         env.reset()

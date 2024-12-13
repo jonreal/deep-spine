@@ -1,7 +1,7 @@
 from typing import Optional, Any
 import gymnasium as gym
 import numpy as np
-import mujoco as mj
+import mujoco
 
 from stable_baselines3.common.callbacks import BaseCallback
 from deep_spine.environments.base_environment import BaseEnvironment
@@ -9,6 +9,46 @@ from deep_spine.environments.base_environment import BaseEnvironment
 from deep_spine.spinal_layers.filters import iir, mutual_info
 
 import deep_spine.utils.scope as scope
+
+class Figures:
+    def __init__(
+        self,
+        viewport: mujoco.MjrRect,
+        ntraces: int,
+        window: int,
+        ylabel: str=None,
+        xlim: np.ndarray = None,
+        ylim: np.ndarray = None
+    ):
+        self.ylabel = ylabel
+        self.ntraces = ntraces
+        self.buffer = np.zeros((ntraces, window))
+        self.window = window
+        self.viewport = viewport
+        self.figure = mujoco.MjvFigure()
+        self.figure.figurergba = np.array([0, 0, 0, 0])
+        self.figure.panergba = np.array([0, 0, 0, 0])
+        self.figure.flg_ticklabel[0] = 0
+        self.figure.linewidth = 1
+        self.figure.minwidth = '0000000'
+        self.yformat = '%.2f'
+        for i in range(ntraces):
+            self.figure.linepnt[i] = window
+            self.figure.linedata[i][:2*window:2] = np.linspace(0, 1, window)
+            self.figure.linedata[i][1:2*window:2] = self.buffer[i,:]
+        if xlim is not None:
+            self.figure.range[0][0] = xlim[0]
+            self.figure.range[0][1] = xlim[1]
+        if ylim is not None:
+            self.figure.range[1][0] = ylim[0]
+            self.figure.range[1][1] = ylim[1]
+
+    def update(self, data):
+        self.buffer[:,:-1] = self.buffer[:,1:]
+        self.buffer[:,-1] = data
+        for i in range(self.ntraces):
+            self.figure.linedata[i][1:2*self.window:2] = self.buffer[i,:]
+
 
 class Arm26Babble(BaseEnvironment, gym.Env):
     def __init__(
@@ -28,6 +68,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
+        render_in_background: bool = False,
+        render_lossless: bool = False,
         azimuth: int = 180,
         elevation: int = -90,
         distance: int = 2,
@@ -45,6 +87,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             xml_path=xml_path,
             frame_rate=frame_rate,
             save_frames_to_path=save_frames_to_path,
+            render_in_background=render_in_background,
+            render_lossless=render_lossless,
             azimuth=azimuth,
             elevation=elevation,
             distance=distance,
@@ -72,64 +116,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed)
 
-        ## Actions: [act_II, act_Ia, act_MN (aleady in
-        ## spinal_layer)]
-        ## We get Ia because our cost function is the correlation between
-        ## act_MN and act_Ia.
-        #supraspinal_effector_space = gym.spaces.Box(
-        #    low=np.zeros(3*self.spinal_layer.n,),
-        #    high=np.ones(3*self.spinal_layer.n,)
-        #)
-        #self.action_space = gym.spaces.Box(
-        #    low=np.concatenate(
-        #        [spinal_layer.efferent_space.low,
-        #        supraspinal_effector_space.low]
-        #    ),
-        #    high=np.concatenate(
-        #        [spinal_layer.efferent_space.high,
-        #        supraspinal_effector_space.high]
-        #    )
-        #)
-
-        ## Features: [spinal_afferents, supraspinal_afferents]
-        ## [length, velocity, a_MN, descending_drive (babble) (can be neg)]
-        #supraspinal_afferent_space = gym.spaces.Box(
-        #    low=np.concatenate(
-        #        [np.zeros(self.spinal_layer.n,),
-        #        -np.ones(self.spinal_layer.n,)]
-        #    ),
-        #    high=np.concatenate(
-        #        [np.ones(self.spinal_layer.n,),
-        #        np.ones(self.spinal_layer.n,)]
-        #    )
-        #)
-        #self.observation_space = gym.spaces.Box(
-        #    low=np.concatenate(
-        #        [spinal_layer.afferent_space.low,
-        #         supraspinal_afferent_space.low]
-        #    ),
-        #    high=np.concatenate(
-        #        [spinal_layer.afferent_space.high,
-        #         supraspinal_afferent_space.high]
-        #    )
-        #)
         self.supraspinal_decimation_factor = supraspinal_decimation_factor
-
-        #self.xcor_window = xcor_window
-        #self.xcorfilts = self._initialize_filters()
-        #self.mi_filter = [
-        #    mutual_info.MutualInformationFilter(
-        #        window_size=xcor_window,
-        #        num_bins=10
-        #    ) for _ in range(self.spinal_layer.n**2)
-        #]
-
-        #self.act_II = np.zeros(self.spinal_layer.n,)
-        #self.act_Ia = np.zeros(self.spinal_layer.n,)
-        #self.act_aMN = np.zeros(self.spinal_layer.n,)
-        #self.act_muscle = np.zeros(self.spinal_layer.n,)
-        #self.descending_drive = np.zeros(self.spinal_layer.n,)
-
         self.max_muscle_strengths = self.model.actuator_gainprm[:,3].copy()
         self.set_muscle_strength_factor(muscle_strength_factor)
 
@@ -156,6 +143,135 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.log_babble_step = np.zeros((self.spinal_layer.n, 2))
         self.log_babble_amp = np.zeros(self.spinal_layer.n,)
 
+        # Figures
+        self.figs = []
+        T = 1
+        H = 80;
+        ys = 900
+        self.N = int(T / self.model.opt.timestep)
+
+        # qpos
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-H, 400, H),
+            ntraces=2,
+            window=self.N,
+            ylabel='qpos',
+            xlim=np.array([0, T]),
+            ylim=np.array([-2, 2])
+        )
+        self.figs.append(fig)
+        # qvel
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-2*H, 400, H),
+            ntraces=2,
+            window=self.N,
+            ylabel='qvel',
+            xlim=np.array([0, T]),
+            ylim=np.array([-0.5, 0.5])
+        )
+        self.figs.append(fig)
+        # length
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-3*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='len',
+            xlim=np.array([0, T]),
+            ylim=np.array([-1, 1])
+        )
+        self.figs.append(fig)
+        # velocity
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-4*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='vel',
+            xlim=np.array([0, T]),
+            ylim=np.array([-0.25, 0.25])
+        )
+        self.figs.append(fig)
+        # force
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-5*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='force',
+            xlim=np.array([0, T]),
+            ylim=np.array([-20, 0])
+        )
+        self.figs.append(fig)
+        # act_II
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-6*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='act_II',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+        )
+        self.figs.append(fig)
+        # act_Ia
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-7*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='act_Ia',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+        )
+        self.figs.append(fig)
+        # babble_signal
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-8*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='babble',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+        )
+        self.figs.append(fig)
+        # act_aMN
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-9*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='MN',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+            )
+        self.figs.append(fig)
+        # act_muscle
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-10*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='act_MN',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+        )
+        self.figs.append(fig)
+        # activation
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-11*H, 400, H),
+            ntraces=6,
+            window=self.N,
+            ylabel='act',
+            xlim=np.array([0, T]),
+            ylim=np.array([0, 1])
+        )
+        self.figs.append(fig)
+
+        #xlabel
+        fig = Figures(
+            viewport=mujoco.MjrRect(800, ys-11*H - 20, 400, 10),
+            ntraces=0,
+            window=self.N,
+            xlim=np.array([-T, 0])
+        )
+        fig.figure.yformat = ''
+        fig.figure.flg_ticklabel[0] = 1
+        fig.figure.flg_ticklabel[1] = 1
+        self.figs.append(fig)
 
     def set_muscle_strength_factor(self, factor):
         self.model.actuator_gainprm[:,3] = factor * self.max_muscle_strengths
@@ -163,66 +279,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
     def initialize_spinal_layer(self, spinal_layer):
         spinal_layer.initialize(self.model)
         self.simulation_sampling_rate = 1 / self.model.opt.timestep
-        mj.set_mjcb_control(spinal_layer.callback)
+        mujoco.set_mjcb_control(spinal_layer.callback)
         return spinal_layer
-
-#    def _initialize_filters(self):
-#        b = np.zeros(self.xcor_window,)
-#        a = np.zeros(self.xcor_window,)
-#        a[0] = 1
-#        a[1] = -1
-#        b[0] = 1
-#        b[self.xcor_window - 1] = -1
-#        filters = [
-#            iir.IirFilt(b,a)
-#            for _ in range(self.spinal_layer.n**2)
-#        ]
-#        return filters
-
-
-#    def _update_tb_log(self) -> None:
-#        """ Update the cache for the log file """
-#        self.log_eps_reward = self.eps_reward
-#        self.log_eps = self.eps
-#      #  self.log_babble_step = self.babble_step
-#      #  self.log_babble_amp = self.babble_amp
-#
-#    # These are the features
-#    # descending_drive is babble and should be negative
-
-
-    #def _sample_afferent_signals(self):
-    #    self.afferent_signals = np.concatenate(
-    #        (
-    #            self.spinal_layer.afferent_signals,
-    #            self.act_muscle,
-    #            self.descending_drive,
-    #        )
-    #    )
-
-#    def _update_reward(self):
-#        self.mi = (
-#            [f.filter(x,y)
-#            for f, x, y in zip(
-#                self.mi_filter,
-#                self.act_aMN,
-#                self.act_Ia
-#            )]
-#        )
-#        self.reward += np.linalg.norm(self.mi)
-
-        #outer_product = np.outer(
-        #    self.act_MN,
-        #    self.act_Ia
-        #)
-        #self.correlation = (
-        #    [f.filter(x)
-        #    for f, x  in zip(
-        #        self.xcorfilts,
-        #        outer_product.flatten() / (self.spinal_layer.n**2)
-        #    )]
-        #)
-        #self.reward += np.linalg.norm(self.correlation)
 
     def _set_initial_conditions(self):
         self.done = False
@@ -292,11 +350,10 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.reward = 0
         self.spinal_layer.set_descending_drive(self.babble_signal)
         for steps in range(self.supraspinal_decimation_factor):
-            mj.mj_step(self.model, self.data)
+            mujoco.mj_step(self.model, self.data)
             self.simulation_steps += 1
-            self._render()
-            #self._sample_afferent_signals()
-            #self._update_reward()
+            self._update_figures()
+            self._render(self.figs)
             self._update_status()
             self._write_data_to_logfile()
             self._update_babble()
@@ -321,6 +378,31 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             self.logfile = open(path_to_logfile, 'w')
         else:
             self.logfile = None
+
+    def _update_figures(self):
+
+        # qpos
+        self.figs[0].update(self.data.qpos)
+        # qvel
+        self.figs[1].update(self.data.qvel)
+        # length
+        self.figs[2].update(self.spinal_layer.length)
+        # velocity
+        self.figs[3].update(self.spinal_layer.velocity)
+        # force
+        self.figs[4].update(self.spinal_layer.force)
+        # act_II
+        self.figs[5].update(self.spinal_layer.act_II)
+        # act_Ia
+        self.figs[6].update(self.spinal_layer.act_Ia)
+        # babble_signal
+        self.figs[7].update(self.babble_signal)
+        # act_aMN
+        self.figs[8].update(self.spinal_layer.act_aMN)
+        # act_muscle
+        self.figs[9].update(self.spinal_layer.act_muscle)
+        # activation
+        self.figs[10].update(self.spinal_layer.activation)
 
     def _write_data_to_logfile(self):
         if self.logfile:

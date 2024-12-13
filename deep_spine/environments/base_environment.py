@@ -1,4 +1,4 @@
-import cv2
+import av
 import os
 import numpy as np
 import mujoco
@@ -6,6 +6,9 @@ from mujoco.glfw import glfw
 from typing import Optional
 from PIL import Image
 import OpenGL.GL as gl
+import time
+
+import subprocess
 
 
 class BaseEnvironment(object):
@@ -14,6 +17,8 @@ class BaseEnvironment(object):
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
+        render_in_background: bool = False,
+        render_lossless: bool = False,
         azimuth: int = 180,
         elevation: int = -90,
         distance: int = 2,
@@ -25,7 +30,13 @@ class BaseEnvironment(object):
         self._initialize_mujoco()
 
         if self.frame_rate:
+            self.render_lossless = render_lossless
             self._initialize_render(azimuth, elevation, distance, lookat)
+            if render_in_background:
+                mujoco.mjr_setBuffer(
+                    mujoco.mjtFramebuffer.mjFB_OFFSCREEN, self.context
+                )
+
         if save_frames_to_path and self.frame_rate:
             self.save_frames_to_path = save_frames_to_path
             self._initialize_video_writer()
@@ -36,13 +47,39 @@ class BaseEnvironment(object):
 
     def _initialize_video_writer(self):
         width, height = glfw.get_framebuffer_size(self.window)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID' for AVI
         os.makedirs(os.path.dirname(self.save_frames_to_path), exist_ok=True)
-        self.video_writer = cv2.VideoWriter(
-            f"{self.save_frames_to_path}.mp4",
-            fourcc, 100.0, (width, height)
-        )
+        vfps = 10*self.frame_rate
+        if self.render_lossless:
+            self.container = av.open(f"{self.save_frames_to_path}.mov", 'w')
+            self.stream = self.container.add_stream('rawvideo', rate=vfps)
+            self.stream.pix_fmt = "rgb24"
+        else:
+            self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
+            self.stream = self.container.add_stream('mpeg4', rate=vfps)
+            self.stream.bit_rate = 400000000
+        self.stream.width = width
+        self.stream.height = height
+        # Set up FFmpeg filter graph for video processing
+        self.filter_graph = av.filter.Graph()
 
+        # Convert width and height to strings
+        width_str = str(width)
+        height_str = str(height)
+
+        self.buffer_source = self.filter_graph.add(
+            "buffer",
+            name="in",
+            width=width_str,  # Convert to string
+            height=height_str,  # Convert to string
+            pix_fmt="rgb24",
+            time_base=f"{1/vfps}"
+        )
+        vflip_filter = self.filter_graph.add("vflip", name="vflip")
+        self.buffer_sink = self.filter_graph.add("buffersink", name="out")
+
+        # Link the filters
+        self.buffer_source.link_to(vflip_filter)
+        vflip_filter.link_to(self.buffer_sink)
 
     def _initialize_mujoco(self):
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)
@@ -70,14 +107,14 @@ class BaseEnvironment(object):
         glfw.swap_interval(1)
         self.scene = mujoco.MjvScene(self.model, maxgeom=10000)
         self.context = mujoco.MjrContext(
-                self.model, mujoco.mjtFontScale.mjFONTSCALE_150.value
+                self.model, mujoco.mjtFontScale.mjFONTSCALE_100.value
         )
         viewport_width, viewport_height = glfw.get_framebuffer_size(
                 self.window
         )
         self.viewport = mujoco.MjrRect(0, 0, viewport_width, viewport_height)
 
-    def _render(self):
+    def _render(self, figures=None):
         if (self.frame_rate
             and (
                 self.data.time % (1/self.frame_rate)
@@ -90,6 +127,20 @@ class BaseEnvironment(object):
                   mujoco.mjtCatBit.mjCAT_ALL.value, self.scene
             )
             mujoco.mjr_render(self.viewport, self.scene, self.context)
+
+            if figures:
+                for fig in figures:
+                    mujoco.mjr_figure(fig.viewport,fig.figure, self.context)
+                    if fig.ylabel:
+                        mujoco.mjr_overlay(
+                            mujoco.mjtFont.mjFONT_NORMAL,
+                            mujoco.mjtGridPos.mjGRID_LEFT,
+                            fig.viewport,
+                            fig.ylabel,
+                            None,
+                            self.context
+                        )
+
 
            # Add timestamp text
             epsstamp = f"Eps: {int(self.eps)}"
@@ -107,8 +158,17 @@ class BaseEnvironment(object):
                 width, height = glfw.get_framebuffer_size(self.window)
                 image = np.zeros((height, width, 3), dtype=np.uint8)
                 mujoco.mjr_readPixels(image, None, self.viewport, self.context)
-                image = cv2.cvtColor(np.flip(image, axis=0), cv2.COLOR_RGB2BGR)
-                self.video_writer.write(image)
+                frame = av.VideoFrame.from_ndarray(
+                    image, format='rgb24'
+                )
+                self.buffer_source.push(frame)
+                flipped = self.buffer_sink.pull()
+                packet = self.stream.encode(flipped)
+                if packet:
+                    self.container.mux(packet)
+
+                #image = cv2.cvtColor(np.flip(image, axis=0), cv2.COLOR_RGB2BGR)
+                #self.video_writer.write(image)
                 self.frame_count += 1
 
             glfw.swap_buffers(self.window)
@@ -127,4 +187,5 @@ class BaseEnvironment(object):
             self.scene = None
             self.context = None
             self.viewport = None
-        self.video_writer.release()
+        if self.save_frames_to_path:
+            self.container.close()
