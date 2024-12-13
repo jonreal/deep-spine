@@ -15,12 +15,6 @@
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.8+
-- MuJoCo installed and licensed ([MuJoCo website](https://mujoco.org/)).
-- FFmpeg installed for video processing.
-
 ### Steps
 
 1. Clone the repository:
