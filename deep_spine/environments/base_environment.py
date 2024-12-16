@@ -55,8 +55,12 @@ class BaseEnvironment(object):
             self.stream.pix_fmt = "rgb24"
         else:
             self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
-            self.stream = self.container.add_stream('mpeg4', rate=vfps)
-            self.stream.bit_rate = 400000000
+            self.stream = self.container.add_stream('h264', rate=vfps)
+            self.stream.pix_fmt = 'yuv420p'
+            self.stream.options = {'crf': '10'}
+            #self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
+            #self.stream = self.container.add_stream('mpeg4', rate=vfps)
+            #self.stream.bit_rate = 40000000
         self.stream.width = width
         self.stream.height = height
         # Set up FFmpeg filter graph for video processing
@@ -114,7 +118,7 @@ class BaseEnvironment(object):
         )
         self.viewport = mujoco.MjrRect(0, 0, viewport_width, viewport_height)
 
-    def _render(self, figures=None):
+    def _render(self, figures=None, geoms=None):
         if (self.frame_rate
             and (
                 self.data.time % (1/self.frame_rate)
@@ -126,11 +130,16 @@ class BaseEnvironment(object):
                   self.model, self.data, self.opt, None, self.cam,
                   mujoco.mjtCatBit.mjCAT_ALL.value, self.scene
             )
+
+            if geoms:
+                for geom in geoms:
+                    geom.draw(self.scene)
+
             mujoco.mjr_render(self.viewport, self.scene, self.context)
 
             if figures:
                 for fig in figures:
-                    mujoco.mjr_figure(fig.viewport,fig.figure, self.context)
+                    mujoco.mjr_figure(fig.viewport, fig.figure, self.context)
                     if fig.ylabel:
                         mujoco.mjr_overlay(
                             mujoco.mjtFont.mjFONT_NORMAL,
@@ -141,16 +150,14 @@ class BaseEnvironment(object):
                             self.context
                         )
 
-
            # Add timestamp text
-            epsstamp = f"Eps: {int(self.eps)}"
-            timestamp = f"Time: {self.data.time:.2f}s"
+            timestamp = f"Eps: {int(self.eps)}, Time: {self.data.time:.2f}s"
             mujoco.mjr_overlay(
-                mujoco.mjtFont.mjFONT_NORMAL, 
-                mujoco.mjtGridPos.mjGRID_BOTTOMLEFT, 
-                self.viewport, 
-                epsstamp,
+                mujoco.mjtFont.mjFONT_NORMAL,
+                mujoco.mjtGridPos.mjGRID_BOTTOM,
+                mujoco.mjr_maxViewport(self.context),
                 timestamp,
+                None,
                 self.context
             )
 
@@ -168,7 +175,6 @@ class BaseEnvironment(object):
                     self.container.mux(packet)
 
                 #image = cv2.cvtColor(np.flip(image, axis=0), cv2.COLOR_RGB2BGR)
-                #self.video_writer.write(image)
                 self.frame_count += 1
 
             glfw.swap_buffers(self.window)

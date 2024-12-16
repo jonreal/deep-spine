@@ -1,4 +1,4 @@
-import cv2
+import av
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,7 +20,7 @@ class WeightMonitor:
         self.ia_labels = ia_labels
         self.scale_opt = scale_opt
         self.fig, self.ax, self.im = self._initialize_plot(title)
-        self.video_writer = self._initialize_video_writer()
+        self._initialize_video_writer()
 
     def _initialize_plot(self, title):
         plt.ion()
@@ -29,11 +29,17 @@ class WeightMonitor:
         return fig, ax, im
 
     def _plot_heatmap(self, fig, ax, title=None):
+        # Set background to black and text elements to white
+
+
+        # Set the annotation color to white
+        annot_kws = {"color": "white"}
         if ax.collections:
             for cbar in ax.collections:
                 if cbar.colorbar:
                     cbar.colorbar.remove()
         ax.clear()
+
         if self.scale_opt:
             im = sns.heatmap(
                 self.W, annot=True, fmt='.2f',
@@ -51,19 +57,24 @@ class WeightMonitor:
             )
         ax.xaxis.tick_top()
         ax.xaxis.set_label_position('top')
-        ax.set_title(title, pad=-50)
+        ax.set_title(title, pad=-50, color='white')
+
+        plt.style.use('dark_background')
+        print("plotting")
+
         plt.draw()
         return im
 
     def _initialize_video_writer(self):
         os.makedirs(os.path.dirname(self.save_frames_to_path), exist_ok=True)
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         width, height = int(self.fig.bbox.width), int(self.fig.bbox.height)
-        video_writer = cv2.VideoWriter(
-            f"{self.save_frames_to_path}.mp4",
-            fourcc, 1, (width, height)
-        )
-        return video_writer
+
+        vfps = 100
+        self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
+        self.stream = self.container.add_stream('mpeg4', rate=vfps)
+        self.stream.bit_rate = 400000000
+        self.stream.width = width
+        self.stream.height = height
 
     def update_plot(self, W, title=None):
         self.W = W.detach().cpu().numpy()
@@ -73,11 +84,16 @@ class WeightMonitor:
     def write_frame(self):
         # Convert the Matplotlib figure to a format OpenCV can write to the video
         self.fig.canvas.draw()
-        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
-        img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        self.video_writer.write(img)
+        image = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+        packet = self.stream.encode(image)
+        if packet:
+            self.container.mux(packet)
+
+        #img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8)
+        #img = img.reshape(self.fig.canvas.get_width_height()[::-1] + (3,))
+        #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        #self.video_writer.write(img)
 
     def close_video(self):
-        self.video_writer.release()
+        self.container.close()
 

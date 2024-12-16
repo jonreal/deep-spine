@@ -91,20 +91,16 @@ class IaReflexSpinalLayer(BaseSpinalLayer):
 
     def forward(self, data) -> np.ndarray:
         self._sample_mechanics(data)
-
         features = np.concatenate(
             [self.length, self.velocity, self.activation, self.drive]
         )
-
-        #features = np.concatenate(
-        #    [self.length, self.velocity, self.act_muscle, self.drive]
-        #)
-
         features = torch.tensor(features, dtype=torch.float32)
-
-        self.act_II, self.act_Ia, self.act_aMN, self.act_muscle = (
+        act_II, act_Ia, act_aMN, act_muscle = (
             self.net.forward(features)
         )
-
+        self.act_II[:] = act_II.detach().cpu().numpy()
+        self.act_Ia[:] = act_Ia.detach().cpu().numpy()
+        self.act_aMN[:] = act_aMN.detach().cpu().numpy()
+        self.act_muscle[:] = act_muscle.detach().cpu().numpy()
         return self.act_muscle
 
