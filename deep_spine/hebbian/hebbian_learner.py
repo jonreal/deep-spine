@@ -19,7 +19,7 @@ class HebbianMonitorFigure:
         N = int(T / sim_timestep)
         self.figs = [
             viz.TracesFigure(
-                viewport=mujoco.MjrRect(xs, ys-H, W, H),
+                viewport=mujoco.MjrRect(xs, int(ys-0.5*H), W, int(0.5*H)),
                 ntraces=source.pre_synaptic.numel(),
                 window=N,
                 source=source.pre_synaptic,
@@ -28,62 +28,89 @@ class HebbianMonitorFigure:
                 ylim=np.array([0, 1])
             ),
             viz.TracesFigure(
-                viewport=mujoco.MjrRect(xs, ys-2*H, W, H),
-                ntraces=source.post_synaptic.numel(),
-                window=N,
-                source=source.post_synaptic,
-                ylabel='post',
-                xlim=np.array([0, T]),
-                ylim=np.array([0, 1])
-            ),
-            viz.TracesFigure(
-                viewport=mujoco.MjrRect(xs, ys-3*H, W, H),
+                viewport=mujoco.MjrRect(xs, ys-H, W, int(0.5*H)),
                 ntraces=source.post_dev.numel(),
                 window=N,
                 source=source.post_dev,
-                ylabel='dev',
+                ylabel='post*',
                 xlim=np.array([0, T]),
                 ylim=np.array([0, 1])
             ),
             viz.TracesFigure(
-                viewport=mujoco.MjrRect(xs, ys-4*H, W, H),
-                ntraces=source.learning_signal.numel(),
+                viewport=mujoco.MjrRect(xs, ys-2*H, W, H),
+                ntraces=source.learning_signal[0][:].numel(),
                 window=N,
-                source=source.learning_signal,
-                ylabel='learn',
+                source=source.learning_signal[0][:],
+                ylabel='L_1j',
                 xlim=np.array([0, T]),
                 ylim=np.array([-0.001, 0.001]),
                 yformat='%.5f',
-                add_zero_line=True
+                ysymmetric=True
+            ),
+            viz.TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys-3*H, W, H),
+                ntraces=source.learning_signal[1][:].numel(),
+                window=N,
+                source=source.learning_signal[1][:],
+                ylabel='L_2j',
+                xlim=np.array([0, T]),
+                ylim=np.array([-0.001, 0.001]),
+                yformat='%.5f',
+                ysymmetric=True
+            ),
+            viz.TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys-4*H, W, H),
+                ntraces=source.learning_signal[2][:].numel(),
+                window=N,
+                source=source.learning_signal[2][:],
+                ylabel='L_3j',
+                xlim=np.array([0, T]),
+                ylim=np.array([-0.001, 0.001]),
+                yformat='%.5f',
+                ysymmetric=True
             ),
             viz.TracesFigure(
                 viewport=mujoco.MjrRect(xs, ys-5*H, W, H),
-                ntraces=source.compensation.numel(),
+                ntraces=source.learning_signal[3][:].numel(),
                 window=N,
-                source=source.compensation,
-                ylabel='comp',
+                source=source.learning_signal[3][:],
+                ylabel='L_4j',
                 xlim=np.array([0, T]),
                 ylim=np.array([-0.001, 0.001]),
-                yformat='%.5f'
+                yformat='%.5f',
+                ysymmetric=True
             ),
             viz.TracesFigure(
                 viewport=mujoco.MjrRect(xs, ys-6*H, W, H),
-                ntraces=source.rate.numel(),
+                ntraces=source.learning_signal[4][:].numel(),
                 window=N,
-                source=source.rate,
-                ylabel='rate',
+                source=source.learning_signal[4][:],
+                ylabel='L_5j',
                 xlim=np.array([0, T]),
-                ylim=np.array([-0.0001, 0.0001]),
-                yformat='%.5f'
+                ylim=np.array([-0.001, 0.001]),
+                yformat='%.5f',
+                ysymmetric=True
             ),
             viz.TracesFigure(
                 viewport=mujoco.MjrRect(xs, ys-7*H, W, H),
-                ntraces=source.dW.numel(),
+                ntraces=source.learning_signal[5][:].numel(),
                 window=N,
-                source=source.dW,
-                ylabel='dW',
+                source=source.learning_signal[5][:],
+                ylabel='L_6j',
                 xlim=np.array([0, T]),
-                ylim=np.array([-0.0001, 0.0001]),
+                ylim=np.array([-0.001, 0.001]),
+                yformat='%.5f',
+                ysymmetric=True
+            ),
+            viz.TracesFigure(
+                viewport=mujoco.MjrRect(
+                    xs+W - 50, ys + 10, int(W/8), int(1.85*H)
+                ),
+                ntraces=source.learning_signal[5][:].numel(),
+                window=N,
+                source=None,
+                xlim=np.array([0, T]),
+                ylim=np.array([-10, -1]),
                 yformat='%.5f'
             ),
             viz.TracesFigure(
@@ -96,6 +123,16 @@ class HebbianMonitorFigure:
         self.figs[-1].figure.yformat = ''
         self.figs[-1].figure.flg_ticklabel[0] = 1
         self.figs[-1].figure.flg_ticklabel[1] = 1
+        self.figs[-2].figure.flg_legend = 1
+        self.figs[-2].figure.linename[0] = 'SF'
+        self.figs[-2].figure.linename[1] = 'SE'
+        self.figs[-2].figure.linename[2] = 'EF'
+        self.figs[-2].figure.linename[3] = 'EE'
+        self.figs[-2].figure.linename[4] = 'BF'
+        self.figs[-2].figure.linename[5] = 'BE'
+        self.figs[-2].figure.flg_ticklabel[0] = 0
+        self.figs[-2].figure.flg_ticklabel[1] = 0
+        self.figs[-2].figure.flg_extend = 0
 
 class HebbianLearner:
     def __init__(

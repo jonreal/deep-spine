@@ -34,7 +34,10 @@ class HeatmapGeom:
                     G = 0*(scale) + 0.5*(1-scale) # from 0.5 to 0
                     B = 0*(scale) + 0.5*(1-scale) # from 0.5 to 0
                 w_rgba = np.array([R, G, B, 0.1])
-                center = self.center + np.array([0.085*i, 0.085*j, 0])
+                center = (
+                    self.center
+                    + np.array([2.15*self.size*i, 2.15*self.size*j, 0])
+                )
                 mujoco.mjv_initGeom(
                     scene.geoms[scene.ngeom],
                     type=mujoco.mjtGeom.mjGEOM_BOX,
@@ -98,7 +101,7 @@ class HeatmapGeom:
                     )
                     scene.geoms[scene.ngeom].label = "_"
                     scene.ngeom += 1
-                    tx_center = center + np.array([0.02, -0.17, 0])
+                    tx_center = center + np.array([0.02, -0.2, 0])
                     mujoco.mjv_initGeom(
                         scene.geoms[scene.ngeom],
                         type=mujoco.mjtGeom.mjGEOM_LABEL,
@@ -124,7 +127,7 @@ class TracesFigure:
         xlim: np.ndarray = None,
         ylim: np.ndarray = None,
         yformat: str = '%.2f',
-        add_zero_line = False
+        ysymmetric: bool = False,
     ):
         self.ylabel = ylabel
         self.ntraces = ntraces
@@ -138,17 +141,15 @@ class TracesFigure:
         self.figure.linewidth = 1
         self.figure.minwidth = '0000000'
         self.figure.yformat = yformat
+        if ysymmetric:
+            self.figure.flg_symmetric = 1
+            self.figure.gridsize[1] = 3
+
         self.source = source
         for i in range(ntraces):
             self.figure.linepnt[i] = window
             self.figure.linedata[i][:2*window:2] = np.linspace(0, 1, window)
             self.figure.linedata[i][1:2*window:2] = self.buffer[i,:]
-        if add_zero_line:
-            self.figure.linepnt[ntraces] = 2
-            self.figure.linedata[ntraces][:4:2] = np.array([0, 1])
-            self.figure.linedata[ntraces][1:4:2] = np.array([0, 0])
-            self.figure.linergb[ntraces][:] = np.array([1, 1, 1])
-
 
         if xlim is not None:
             self.figure.range[0][0] = xlim[0]

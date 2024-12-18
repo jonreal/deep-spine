@@ -28,7 +28,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         render_lossless: bool = False,
         azimuth: int = 180,
         elevation: int = -90,
-        distance: int = 2,
+        distance: int = 2.5,
         lookat: np.ndarray = np.array([0.35, 0, 0.25]),
         ) -> None:
 
@@ -105,8 +105,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
         # Weight matrix visualization
         W_Ia_heatmap = viz.HeatmapGeom(
-            center=np.array([-0.4, -0.9, 0.1]),
-            size=0.04,
+            center=np.array([-0.60, -1.2, 0.1]),
+            size=0.05,
             W=spinal_layer.net.aMN.W_Ia,
             xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
             ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
@@ -129,7 +129,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             source=self.data.qpos,
             ylabel='qpos',
             xlim=np.array([0, T]),
-            ylim=np.array([-0.25, 0.25])
+            ylim=np.array([-0.25, 0.25]),
+            ysymmetric=True
         )
         self.add_fig(fig)
         # qvel
@@ -140,7 +141,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             source=self.data.qvel,
             ylabel='qvel',
             xlim=np.array([0, T]),
-            ylim=np.array([-0.1, 0.1])
+            ylim=np.array([-0.1, 0.1]),
+            ysymmetric=True
         )
         self.add_fig(fig)
         # length
@@ -151,7 +153,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             source=self.spinal_layer.length,
             ylabel='len',
             xlim=np.array([0, T]),
-            ylim=np.array([-1, 1])
+            ylim=np.array([0, 1])
         )
         self.add_fig(fig)
         # velocity
@@ -162,7 +164,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             source=self.spinal_layer.velocity,
             ylabel='vel',
             xlim=np.array([0, T]),
-            ylim=np.array([-0.25, 0.25])
+            ylim=np.array([-0.1, 0.1]),
+            ysymmetric=True
         )
         self.add_fig(fig)
         # force
