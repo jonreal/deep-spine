@@ -55,14 +55,18 @@ class aMN(nn.Module):
         self,
         num_motor_units,
         K,
-        k_leak=0.1,
+        k_s=0.1,
+        k_d=1.1,
         W_Ia=None,
+        shunt_model='linear',
         seed=12345
     ):
         super().__init__()
         self.n = num_motor_units
         self.K = K
-        self.k_leak = torch.tensor(k_leak)
+        self.k_s = torch.tensor(k_s)
+        self.k_d = torch.tensor(k_d)
+        self.p = torch.tensor(1)
         torch.manual_seed(seed)
         if W_Ia is None:
             self.W_Ia = nn.Parameter(
@@ -79,6 +83,14 @@ class aMN(nn.Module):
             [iir.IirFilt([0, self.K], [1, K-1]) for _ in range(self.n)]
         )
 
+        shunt_models = {
+            'linear': self.linear_shunt,
+            'log': self.log_shunt,
+            'power': self.power_shunt
+        }
+        self.shunt_model = shunt_models[shunt_model]
+
+
     @torch.no_grad()
     def forward(self, act_Ia, descending_drive):
         synaptic_act = torch.zeros(self.n)
@@ -91,11 +103,20 @@ class aMN(nn.Module):
         open_channels = torch.abs(activity)
         a = torch.tensor([
             self.k_filter[i].filter(
-                activity[i]
-                / (self.k_leak + open_channels[i])
+                activity[i] / self.shunt_model(open_channels[i])
             ) for i in range(self.n)
         ])
         return torch.clip(a, 0, 1)
+
+    def linear_shunt(self, open_channels):
+        return self.k_s + self.k_d * open_channels
+
+    def log_shunt(self, open_channels):
+        return self.k_s + self.k_d * torch.log(1 + open_channels)
+
+    def power_shunt(self, open_channels):
+        return self.k_s + self.k_d * open_channels**self.p
+
 
 class Muscle(nn.Module):
     def __init__(

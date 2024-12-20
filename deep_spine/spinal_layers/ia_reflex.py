@@ -20,7 +20,9 @@ class IaReflex(nn.Module):
         muscle_bias = 0,
         muscle_gain = 0,
         K = 0,
-        k_leak = 0.1,
+        k_s = 0.1,
+        k_d = 1.1,
+        shunt_model='linear',
         W_Ia = None,
         ):
         super().__init__()
@@ -41,7 +43,9 @@ class IaReflex(nn.Module):
         self.aMN = aMN(
             self.n,
             K=K,
-            k_leak=k_leak,
+            k_s=k_s,
+            k_d=k_d,
+            shunt_model=shunt_model,
             W_Ia=W_Ia,
         )
         self.muscle = Muscle(

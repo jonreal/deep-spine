@@ -7,8 +7,10 @@ from typing import Optional
 from PIL import Image
 import OpenGL.GL as gl
 import time
+import copy
 
 import subprocess
+from fractions import Fraction
 
 
 class BaseEnvironment(object):
@@ -29,6 +31,10 @@ class BaseEnvironment(object):
         self.frame_rate = frame_rate
         self._initialize_mujoco()
 
+        self.figs = None
+        self.geoms = None
+        self.annotations = None
+
         if self.frame_rate:
             self.render_lossless = render_lossless
             self._initialize_render(azimuth, elevation, distance, lookat)
@@ -45,21 +51,38 @@ class BaseEnvironment(object):
         else:
             self.save_frames_to_path = None
 
+    def add_geom(self, geom):
+        if self.geoms is None:
+            self.geoms = []
+        self.geoms.append(geom)
+
+    def add_fig(self, fig):
+        if self.figs is None:
+            self.figs = []
+        self.figs.append(fig)
+
+    def add_annotation(self, annotation):
+        if self.annotations is None:
+            self.annotations = []
+        self.annotations.append(annotation)
+
     def _initialize_video_writer(self):
         width, height = glfw.get_framebuffer_size(self.window)
         os.makedirs(os.path.dirname(self.save_frames_to_path), exist_ok=True)
-        vfps = 10*self.frame_rate
+        self.vfps = 10*self.frame_rate
         if self.render_lossless:
             self.container = av.open(f"{self.save_frames_to_path}.mov", 'w')
-            self.stream = self.container.add_stream('rawvideo', rate=vfps)
+            self.stream = self.container.add_stream('rawvideo', rate=self.vfps)
             self.stream.pix_fmt = "rgb24"
         else:
             self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
-            self.stream = self.container.add_stream('h264', rate=vfps)
+            self.stream = self.container.add_stream('h264', rate=self.vfps)
             self.stream.pix_fmt = 'yuv420p'
-            self.stream.options = {'crf': '10'}
+            self.stream.options = {
+                'crf': '18',   # High quality
+            }
             #self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
-            #self.stream = self.container.add_stream('mpeg4', rate=vfps)
+            #self.stream = self.container.add_stream('mpeg4', rate=self.vfps)
             #self.stream.bit_rate = 40000000
         self.stream.width = width
         self.stream.height = height
@@ -76,7 +99,7 @@ class BaseEnvironment(object):
             width=width_str,  # Convert to string
             height=height_str,  # Convert to string
             pix_fmt="rgb24",
-            time_base=f"{1/vfps}"
+            time_base=f"{1/self.vfps}"
         )
         vflip_filter = self.filter_graph.add("vflip", name="vflip")
         self.buffer_sink = self.filter_graph.add("buffersink", name="out")
@@ -118,7 +141,7 @@ class BaseEnvironment(object):
         )
         self.viewport = mujoco.MjrRect(0, 0, viewport_width, viewport_height)
 
-    def _render(self, figures=None, geoms=None):
+    def _render(self):
         if (self.frame_rate
             and (
                 self.data.time % (1/self.frame_rate)
@@ -131,30 +154,43 @@ class BaseEnvironment(object):
                   mujoco.mjtCatBit.mjCAT_ALL.value, self.scene
             )
 
-            if geoms:
-                for geom in geoms:
+            if self.geoms is not None:
+                for geom in self.geoms:
                     geom.draw(self.scene)
 
             mujoco.mjr_render(self.viewport, self.scene, self.context)
 
-            if figures:
-                for fig in figures:
+            if self.figs is not None:
+                for fig in self.figs:
                     mujoco.mjr_figure(fig.viewport, fig.figure, self.context)
+                    label_viewport = copy.deepcopy(fig.viewport)
+                    label_viewport.left += -20
                     if fig.ylabel:
                         mujoco.mjr_overlay(
                             mujoco.mjtFont.mjFONT_NORMAL,
                             mujoco.mjtGridPos.mjGRID_LEFT,
-                            fig.viewport,
+                            label_viewport,
                             fig.ylabel,
                             None,
                             self.context
                         )
 
+            if self.annotations is not None:
+                for annotation in self.annotations:
+                    mujoco.mjr_overlay(
+                        annotation.font,
+                        annotation.gridpos,
+                        annotation.viewport,
+                        annotation.text,
+                        None,
+                        self.context
+                    )
+
            # Add timestamp text
             timestamp = f"Eps: {int(self.eps)}, Time: {self.data.time:.2f}s"
             mujoco.mjr_overlay(
                 mujoco.mjtFont.mjFONT_NORMAL,
-                mujoco.mjtGridPos.mjGRID_BOTTOM,
+                mujoco.mjtGridPos.mjGRID_TOP,
                 mujoco.mjr_maxViewport(self.context),
                 timestamp,
                 None,
@@ -168,14 +204,15 @@ class BaseEnvironment(object):
                 frame = av.VideoFrame.from_ndarray(
                     image, format='rgb24'
                 )
+                frame.pts = self.frame_count
+                frame.time_base = Fraction(1, self.vfps)
                 self.buffer_source.push(frame)
                 flipped = self.buffer_sink.pull()
                 packet = self.stream.encode(flipped)
                 if packet:
                     self.container.mux(packet)
-
-                #image = cv2.cvtColor(np.flip(image, axis=0), cv2.COLOR_RGB2BGR)
                 self.frame_count += 1
+
 
             glfw.swap_buffers(self.window)
             glfw.poll_events()
@@ -194,4 +231,14 @@ class BaseEnvironment(object):
             self.context = None
             self.viewport = None
         if self.save_frames_to_path:
-            self.container.close()
+            try:
+                while True:
+                    packet = self.stream.encode(None)
+                    if not packet:
+                        break
+                    self.container.mux(packet)
+            except av.error.EOFError:
+                # Encoder has already finished; no further action needed
+                pass
+            finally:
+                self.container.close()

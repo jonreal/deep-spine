@@ -1,6 +1,20 @@
 import numpy as np
 import mujoco
 
+class Annotation:
+    def __init__(
+        self,
+        text: str,
+        viewport: mujoco.MjrRect,
+        gridpos: int = 0,
+        font: int =0
+    ):
+        self.text = text
+        self.viewport = viewport
+        self.gridpos = gridpos
+        self.font = font
+
+
 class HeatmapGeom:
     def __init__(
         self,
@@ -8,7 +22,10 @@ class HeatmapGeom:
         center: np.ndarray,
         W: np.ndarray,
         xlabel = None,
-        ylabel = None
+        ylabel = None,
+        notext = False,
+        W0 = None,
+        spacing = 2.15
     ):
         self.size = size
         self.center = center
@@ -16,27 +33,49 @@ class HeatmapGeom:
         self.n = W.shape[0]
         self.xlabel = xlabel
         self.ylabel = ylabel
+        self.notext = notext
+        self.W0 = W0
+        self.spacing = spacing
 
     def draw(self, scene):
         for i in range(self.n):
             for j in range(self.n):
-                w = self.W[i][j]
-                if w < 0.5:
-                    # scale 0.0->1.0 from w in [0,0.5]
-                    scale = w / 0.5
-                    R = 0.5*scale + 0*(1-scale)  # from 0 to 0.5
-                    G = 0.5*scale + 0*(1-scale)  # from 0 to 0.5
-                    B = 0.5*scale + 1*(1-scale)  # from 1 to 0.5
+                if self.W0 is not None:
+                    w = self.W[i][j] - self.W0[i][j]  # Compute raw w
+                    if w < 0:
+                        scale = w / -self.W0[i][j]
+                        R = 1 * scale  # From 0 to 1
+                        G = 1 * scale  # From 0 to 1
+                        B = 1  # Always blue
+                    else:
+                        scale = w / (1 - self.W0[i][j])
+                        R = 1  # Always red
+                        G = 1 * (1 - scale)  # From 1 to 0
+                        B = 1 * (1 - scale)  # From 1 to 0
+                    w_rgba = np.array([R, G, B, 0.1])
                 else:
-                    # scale 0.0->1.0 from w in [0.5,1.0]
-                    scale = (w - 0.5) / 0.5
-                    R = 1*scale + 0.5*(1-scale)  # from 0.5 to 1
-                    G = 0*(scale) + 0.5*(1-scale) # from 0.5 to 0
-                    B = 0*(scale) + 0.5*(1-scale) # from 0.5 to 0
+                    w = self.W[i][j]
+                    if w <= 0.5:
+                        # Map [0, 0.5] to [blue, white]
+                        scale = w / 0.5
+                        R = 1 * scale  # From 0 to 1
+                        G = 1 * scale  # From 0 to 1
+                        B = 1  # Always blue
+                    else:
+                        # Map [0.5, 1] to [white, red]
+                        scale = (w - 0.5) / 0.5
+                        R = 1  # Always red
+                        G = 1 * (1 - scale)  # From 1 to 0
+                        B = 1 * (1 - scale)  # From 1 to 0
+
                 w_rgba = np.array([R, G, B, 0.1])
+
                 center = (
                     self.center
-                    + np.array([2.15*self.size*i, 2.15*self.size*j, 0])
+                    + np.array(
+                        [self.spacing*self.size*i,
+                         self.spacing*self.size*j, 0]
+                    )
                 )
                 mujoco.mjv_initGeom(
                     scene.geoms[scene.ngeom],
@@ -51,19 +90,20 @@ class HeatmapGeom:
                 scene.geoms[scene.ngeom].shininess = 0.0
                 scene.ngeom += 1
 
-                tx_center = center + np.array([0.02, -0.025, 0])
-                mujoco.mjv_initGeom(
-                    scene.geoms[scene.ngeom],
-                    type=mujoco.mjtGeom.mjGEOM_LABEL,
-                    size=self.size*np.array([1, 1, 0.01]),
-                    pos=tx_center,
-                    mat=np.eye(3).flatten(),
-                    rgba=np.array([0, 0, 0, 0])
-                )
-                scene.geoms[scene.ngeom].label = f"{w:.2f}"
-                scene.ngeom += 1
+                if not self.notext:
+                    tx_center = center + np.array([0.02, -0.025, 0])
+                    mujoco.mjv_initGeom(
+                        scene.geoms[scene.ngeom],
+                        type=mujoco.mjtGeom.mjGEOM_LABEL,
+                        size=self.size*np.array([1, 1, 0.01]),
+                        pos=tx_center,
+                        mat=np.eye(3).flatten(),
+                        rgba=np.array([0, 0, 0, 0])
+                    )
+                    scene.geoms[scene.ngeom].label = f"{w:.2f}"
+                    scene.ngeom += 1
 
-                if i == 0:
+                if i == 0 and self.xlabel is not None:
                     tx_center = center + np.array([-0.04, -0.025, 0])
                     mujoco.mjv_initGeom(
                         scene.geoms[scene.ngeom],
@@ -84,12 +124,9 @@ class HeatmapGeom:
                         mat=np.eye(3).flatten(),
                         rgba=np.array([0, 0, 0, 0])
                     )
-                    if self.xlabel:
-                        scene.geoms[scene.ngeom].label = f"{self.xlabel[j]}"
-                    else:
-                        scene.geoms[scene.ngeom].label = f"  {j}"
+                    scene.geoms[scene.ngeom].label = f"{self.xlabel[j]}"
                     scene.ngeom += 1
-                if j == 0:
+                if j == 0 and self.ylabel is not None:
                     tx_center = center + np.array([0.01, -0.06, 0])
                     mujoco.mjv_initGeom(
                         scene.geoms[scene.ngeom],
@@ -110,10 +147,7 @@ class HeatmapGeom:
                         mat=np.eye(3).flatten(),
                         rgba=np.array([0, 0, 0, 0])
                     )
-                    if self.ylabel:
-                        scene.geoms[scene.ngeom].label = f"{self.ylabel[i]}"
-                    else:
-                        scene.geoms[scene.ngeom].label = f"{i}"
+                    scene.geoms[scene.ngeom].label = f"{self.ylabel[i]}"
                     scene.ngeom += 1
 
 class TracesFigure:
@@ -128,6 +162,7 @@ class TracesFigure:
         ylim: np.ndarray = None,
         yformat: str = '%.2f',
         ysymmetric: bool = False,
+        gridsize: np.ndarray = None
     ):
         self.ylabel = ylabel
         self.ntraces = ntraces
@@ -144,6 +179,9 @@ class TracesFigure:
         if ysymmetric:
             self.figure.flg_symmetric = 1
             self.figure.gridsize[1] = 3
+        if gridsize is not None:
+            self.figure.gridsize = gridsize
+
 
         self.source = source
         for i in range(ntraces):
@@ -174,32 +212,48 @@ class BarsFigure:
         source: np.ndarray = None,
         xlim: np.ndarray = None,
         ylim: np.ndarray = None,
-        title: str = None
+        title: str = None,
+        xformat: str = '%.2f',
+        gridsize: np.ndarray = None,
+        ysymmetric: bool = False,
     ):
+        self.title = title
         self.ylabel = None
         self.nbars = nbars
         self.viewport = viewport
         self.figure = mujoco.MjvFigure()
+        self.figure.flg_barplot = 1
         self.figure.figurergba = np.array([0, 0, 0, 0])
         self.figure.panergba = np.array([0, 0, 0, 0])
-        self.figure.flg_ticklabel[1] = 0
         self.figure.linewidth = 10
-        self.figure.minwidth = '0000000'
-        self.figure.title = title
-        self.figure.yformat = '%.2f'
+        self.figure.minwidth = '0'
+        self.figure.xformat = xformat
         self.source = source
         for i in range(nbars):
             self.figure.linepnt[i] = 2
             self.figure.linedata[i][:4:2] = np.array([0, self.source[i]])
             self.figure.linedata[i][1:4:2] = np.array([i, i])
-            self.figure.range[0][0] = 0
-            self.figure.range[0][1] = 1
+
+        if ysymmetric:
+            self.figure.flg_symmetric = 1
+
+        if xlim is not None:
+            self.figure.range[0][0] = xlim[0]
+            self.figure.range[0][1] = xlim[1]
+
         if ylim is not None:
             self.figure.range[1][0] = -1
             self.figure.range[1][1] = nbars
+        if gridsize is not None:
+            self.figure.gridsize[0] = gridsize[0]
+            self.figure.gridsize[1] = gridsize[1]
+
+        self.figure.flg_ticklabel[1] = 0
+        self.figure.flg_ticklabel[0] = 1
 
     def update(self):
         for i in range(self.nbars):
             self.figure.linedata[i][:4:2] = np.array([0, self.source[i]])
-
+        self.figure.selection = self.source[0]
+        self.figure.title = f'{self.title}, {self.source[0]:.2f}'
 

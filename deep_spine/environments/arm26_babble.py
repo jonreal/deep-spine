@@ -6,6 +6,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 from deep_spine.environments.base_environment import BaseEnvironment
 import deep_spine.environments.viz as viz
 from deep_spine.spinal_layers.filters import iir
+import gzip
 
 class Arm26Babble(BaseEnvironment, gym.Env):
     def __init__(
@@ -29,7 +30,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         azimuth: int = 180,
         elevation: int = -90,
         distance: int = 2.5,
-        lookat: np.ndarray = np.array([0.35, 0, 0.25]),
+        lookat: np.ndarray = np.array([0.45, 0, -0.5]),
         ) -> None:
 
         self.type = 'arm26babble'
@@ -48,7 +49,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         )
         if path_to_logfile:
             self.logfile = (
-                open(path_to_logfile,'w') if path_to_logfile else None
+                open(path_to_logfile,'ab') if path_to_logfile else None
             )
         else:
             self.logfile = None
@@ -100,12 +101,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         # Figures
         # ---
 
-        self.geoms = None
-        self.figs = None
-
         # Weight matrix visualization
         W_Ia_heatmap = viz.HeatmapGeom(
-            center=np.array([-0.60, -1.2, 0.1]),
+            center= lookat + np.array([-0.92, -1.2, -0.10]),
             size=0.05,
             W=spinal_layer.net.aMN.W_Ia,
             xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
@@ -113,17 +111,30 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         )
         self.add_geom(W_Ia_heatmap)
 
+        W0 = spinal_layer.net.aMN.W_Ia.clone().detach()
+        diffW_Ia_heatmap = viz.HeatmapGeom(
+            center= lookat + np.array([-0.8, -2.1, -5]),
+            size=0.03,
+            W=spinal_layer.net.aMN.W_Ia,
+            W0=W0,
+            notext=True,
+            spacing=2
+        )
+        self.add_geom(diffW_Ia_heatmap)
+
 
         # Vertical Stack of Trace Monitors
         self.figs = []
         T = 1
         H = 80;
+        W = 300
+        xs = 900
         ys = 900
         self.N = int(T / self.model.opt.timestep)
 
         # qpos
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-H, W, H),
             ntraces=2,
             window=self.N,
             source=self.data.qpos,
@@ -135,7 +146,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.add_fig(fig)
         # qvel
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-2*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-2*H, W, H),
             ntraces=2,
             window=self.N,
             source=self.data.qvel,
@@ -147,7 +158,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.add_fig(fig)
         # length
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-3*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-3*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.length,
@@ -158,7 +169,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.add_fig(fig)
         # velocity
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-4*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-4*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.velocity,
@@ -170,7 +181,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.add_fig(fig)
         # force
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-5*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-5*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.force,
@@ -181,74 +192,80 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.add_fig(fig)
         # act_II
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-6*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-6*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.act_II,
             ylabel='act_II',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
         )
         self.add_fig(fig)
         # act_Ia
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-7*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-7*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.act_Ia,
             ylabel='act_Ia',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
         )
         self.add_fig(fig)
         # babble_signal
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-8*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-8*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.babble_signal,
             ylabel='babble',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
         )
         self.add_fig(fig)
         # act_aMN
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-9*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-9*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.act_aMN,
             ylabel='MN',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
             )
         self.add_fig(fig)
         # act_muscle
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-10*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-10*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.act_muscle,
             ylabel='act_MN',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
         )
         self.add_fig(fig)
         # activation
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-11*H, 400, H),
+            viewport=mujoco.MjrRect(xs, ys-11*H, W, H),
             ntraces=6,
             window=self.N,
             source=self.spinal_layer.activation,
             ylabel='act',
             xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
+            ylim=np.array([0, 1]),
+            gridsize=np.array([2, 3])
         )
         self.add_fig(fig)
 
         #xlabel
         fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(800, ys-11*H - 20, 400, 10),
+            viewport=mujoco.MjrRect(xs, ys-11*H - 20, W, 10),
             ntraces=0,
             window=self.N,
             xlim=np.array([-T, 0])
@@ -260,24 +277,18 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
         # Muscle Strength Factor
         fig = viz.BarsFigure(
-            viewport=mujoco.MjrRect(550, 780, 100, 100),
+            viewport=mujoco.MjrRect(220, 0, 150, 100),
             nbars=1,
-            title='Muscle Strength',
+            title=f'Muscle Strength',
             source=self.muscle_strength_factor,
             ylim=np.array([-1, 1]),
-            xlim=np.array([0, 1])
+            xlim=np.array([0, 1]),
+            gridsize=np.array([5, 2]),
+            ysymmetric=True
         )
+        fig.figure.flg_selection = 1
+        fig.figure.selection = self.muscle_strength_factor
         self.add_fig(fig)
-
-    def add_geom(self, geom):
-        if self.geoms is None:
-            self.geoms = []
-        self.geoms.append(geom)
-
-    def add_fig(self, fig):
-        if self.figs is None:
-            self.figs = []
-        self.figs.append(fig)
 
     def set_muscle_strength_factor(self, factor):
         self.muscle_strength_factor[:] = factor
@@ -360,7 +371,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             mujoco.mj_step(self.model, self.data)
             self.simulation_steps += 1
             self._update_figures()
-            self._render(self.figs, self.geoms)
+            self._render()
             self._update_status()
             self._write_data_to_logfile()
             self._update_babble()
@@ -382,7 +393,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def set_logfile(self, path_to_logfile):
         if path_to_logfile:
-            self.logfile = open(path_to_logfile, 'w')
+            self.logfile = open(path_to_logfile, 'ab')
         else:
             self.logfile = None
 
@@ -405,8 +416,12 @@ class Arm26Babble(BaseEnvironment, gym.Env):
                 self.spinal_layer.act_muscle,
                 self.spinal_layer.activation,
             ])
-            data_str = ','.join(map('{:.6f}'.format, data))
-            print(data_str, file=self.logfile)
+            # As a string
+            #data_str = ','.join(map('{:.6f}'.format, data))
+            #print(data_str, file=self.logfile)
+
+            # As a byte string
+            self.logfile.write(data.tobytes())
 
 class LogCallbackArm26Babble(BaseCallback):
     def __init__(self, env, window, verbose=0):

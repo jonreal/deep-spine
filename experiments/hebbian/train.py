@@ -22,15 +22,16 @@ from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 from deep_spine.spinal_layers.ia_reflex import IaReflexSpinalLayer
 import deep_spine.spinal_layers.filters.iir as iir
 import deep_spine.utils.analysis_tools as tools
+import deep_spine.environments.viz as viz
 
 frame_rate = 10
-log_top_dir = './logs/nominal-tuning-2/'
+log_top_dir = './logs/strengthening'
 
 options = {
     'num_eps': 25,
-    'eps_length': 300,
-    'learning_rate': 1,
-    'W0' : 0.05,
+    'eps_length': 120,
+    'learning_rate': 100,
+    'W0' : 0.2,
     'lock_target': None,
     'postive_only': False,
     'min_weight': 0.01,
@@ -41,27 +42,54 @@ options = {
     'muscle_strength_factor': 0.1,
     'muscle_increase_factor': 1.1,
     'babble_max_prob': 0.005,
-    'hebbian_gain': 1,
-    'k_leak': 0.1,
-    'Ia_velocity_gain': 10
+    'hebbian_gain': 2,
+    'k_s': 0.3,
+    'k_d': 2.25,
+    'Ia_velocity_gain': 10,
+    'shunt_model': 'log'
 }
 
-run_id = int(time.time())
+now = time.time()
+local_time = time.localtime(now)
+run_id = int(now)
+date_string = (
+    f'{time.strftime("%b-%-d-%Y", local_time)}\n'
+    f'{run_id}'
+)
 log_dir = (
     f'./{log_top_dir}/{run_id}'
-    f'-W0-{options['W0']}-lr-{options['learning_rate']}'
-    f'-damp-{options['damping']}-'
-    f'-msf-{options['muscle_strength_factor']}'
+    f'-ks={options["k_s"]}'
+    f'-kd={options["k_d"]}'
+    f'-IaV={options["Ia_velocity_gain"]}'
+    f'-lr={options["learning_rate"]}'
+    f'-Hg={options["hebbian_gain"]}'
+    f'-W0={options["W0"]}'
+    f'-mfac={options["muscle_strength_factor"]}'
+    f'-shunt={options["shunt_model"]}'
+)
+annotation =(
+    f'ks={options["k_s"]}\n'
+    f'kd={options["k_d"]}\n'
+    f'kVIa={options["Ia_velocity_gain"]}\n'
+    f'lr={options["learning_rate"]}\n'
+    f'Hg={options["hebbian_gain"]}\n'
+    f'W0={options["W0"]}\n'
+    f'f x m ={options["muscle_increase_factor"]}\n'
+    f'shunt={options["shunt_model"]}'
 )
 
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
 sim_animation = f'./{log_dir}/sim'
-sim_log = f'./{log_dir}/data/sim-data'
-heb_log = f'./{log_dir}/data/heb-data'
-if not os.path.exists(f'./{log_dir}/data'):
-    os.makedirs(f'./{log_dir}/data')
+#sim_log = f'./{log_dir}/data/sim-data'
+#heb_log = f'./{log_dir}/data/heb-data'
+sim_log = None
+heb_log = None
+
+if sim_log  or heb_log:
+    if not os.path.exists(f'./{log_dir}/data'):
+        os.makedirs(f'./{log_dir}/data')
 
 torch.manual_seed(options['seed'])
 if options['W0'] == 'identity':
@@ -82,7 +110,6 @@ env_kwargs = {
     'render_in_background': False,
     'render_lossless': False,
     'task': 'babble',
-    'path_to_logfile': sim_log,
     'episode_length': options['eps_length'],
     'muscle_strength_factor': options['muscle_strength_factor'],
     'babble_max_prob': options['babble_max_prob'],
@@ -103,11 +130,12 @@ spinal_kwargs =  {
     'muscle_gain': 1 / 0.7,
     'W_Ia':  W_Ia0,
     'K': 0.3,
-    'k_leak': options['k_leak']
+    'shunt_model': options['shunt_model'],
+    'k_s': options['k_s'],
+    'k_d': options['k_d']
 }
 
 hebbian_kwargs = {
-    'path_to_logfile': heb_log,
     'gain': options['hebbian_gain'],
     'learning_rate': options['learning_rate'],
     'lock_target': options['lock_target'],
@@ -156,10 +184,10 @@ learner = HebbianLearner(
 
 # Figures for hebian
 heb_figs = HebbianMonitorFigure(
-    xs=10,
+    xs=20,
     ys=580,
     H=80,
-    W=400,
+    W=200,
     T=1,
     sim_timestep=env.model.opt.timestep,
     source=learner
@@ -167,6 +195,19 @@ heb_figs = HebbianMonitorFigure(
 for heb_fig in heb_figs.figs:
     env.add_fig(heb_fig)
 
+annotation = viz.Annotation(
+    text=annotation,
+    viewport=mujoco.MjrRect(175, 90, 200, 200),
+    gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
+)
+env.add_annotation(annotation)
+
+annotation = viz.Annotation(
+    text=date_string,
+    viewport=mujoco.MjrRect(0, 0, 1200, 100),
+    gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
+)
+env.add_annotation(annotation)
 
 simulation_timestep = env.model.opt.timestep
 env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
@@ -179,8 +220,7 @@ env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTUATOR] = True
 env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTIVATION] = True
 
 env.reset()
-env.set_logfile(f'{sim_log}-{env.eps}')
-learner.set_logfile(f'{heb_log}-{env.eps}')
+
 muscle_strength_factor = options['muscle_strength_factor']
 
 print('---\n')
@@ -190,6 +230,10 @@ print('---\n\n')
 steps_per_eps = options['eps_length'] / simulation_timestep
 try:
     for _ in range(options['num_eps']):
+        if sim_log is not None:
+            env.set_logfile(f'{sim_log}-{env.eps}')
+        if heb_log is not None:
+            learner.set_logfile(f'{heb_log}-{env.eps}')
         tstart = time.time()
         done = False
         print('---\n')
@@ -205,8 +249,6 @@ try:
             )
 
         tend = time.time()
-        env.set_logfile(f'{sim_log}-{env.eps}')
-        learner.set_logfile(f'{heb_log}-{env.eps}')
         env.reset()
         muscle_strength_factor = (
             muscle_strength_factor * options['muscle_increase_factor']
