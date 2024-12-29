@@ -44,8 +44,8 @@ class HeatmapGeom:
                     w = self.W[i][j] - self.W0[i][j]  # Compute raw w
                     if w < 0:
                         scale = w / -self.W0[i][j]
-                        R = 1 * scale  # From 0 to 1
-                        G = 1 * scale  # From 0 to 1
+                        R = 1 * (1 - scale)  # From 0 to 1
+                        G = 1 * (1 - scale)  # From 0 to 1
                         B = 1  # Always blue
                     else:
                         scale = w / (1 - self.W0[i][j])

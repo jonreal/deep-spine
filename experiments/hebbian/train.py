@@ -29,7 +29,7 @@ log_top_dir = './logs/strengthening'
 
 options = {
     'num_eps': 25,
-    'eps_length': 120,
+    'eps_length': 90,
     'learning_rate': 100,
     'W0' : 0.2,
     'lock_target': None,
@@ -44,8 +44,8 @@ options = {
     'babble_max_prob': 0.005,
     'hebbian_gain': 2,
     'k_s': 0.3,
-    'k_d': 2.25,
-    'Ia_velocity_gain': 10,
+    'k_d': 2.5,
+    'Ia_velocity_gain': 20,
     'shunt_model': 'log'
 }
 
