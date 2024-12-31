@@ -20,12 +20,11 @@ from deep_spine import (
 from deep_spine import HebbianLearner
 from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 from deep_spine.spinal_layers.ia_reflex import IaReflexSpinalLayer
-import deep_spine.spinal_layers.filters.iir as iir
 import deep_spine.utils.analysis_tools as tools
 import deep_spine.environments.viz as viz
 
 frame_rate = 10
-log_top_dir = './logs/strengthening'
+log_top_dir = './logs/force-investigation'
 
 options = {
     'num_eps': 25,
@@ -75,7 +74,7 @@ annotation =(
     f'Hg={options["hebbian_gain"]}\n'
     f'W0={options["W0"]}\n'
     f'f x m ={options["muscle_increase_factor"]}\n'
-    f'shunt={options["shunt_model"]}'
+    f'shunt={options["shunt_model"]}\n'
 )
 
 if not os.path.exists(log_dir):

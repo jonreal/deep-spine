@@ -31,9 +31,9 @@
     ```bash
     pip install -r requirements.txt
 
-4. Install deep_spine:
+4. Install deep-spine as an editable module:
     ```bash
-    pip install .
+    pip install -e .
 
 ---
 

@@ -187,7 +187,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             source=self.spinal_layer.force,
             ylabel='force',
             xlim=np.array([0, T]),
-            ylim=np.array([-20, 0])
+            ylim=np.array([-1, 0])
         )
         self.add_fig(fig)
         # act_II
