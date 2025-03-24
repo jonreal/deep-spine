@@ -20,12 +20,21 @@
   </option>
 
   <default>
-    <joint type="hinge" pos="0 0 0" axis="0 0 1" limited="true" range="-120 120" damping="1"/>
-    <muscle scale="100" ctrllimited="true" ctrlrange="0 1"/>
+    <joint
+      type="hinge" pos="0 0 0" axis="0 0 1"
+      limited="true" range="-120 120"
+      damping="1"
+    />
+    <muscle
+      scale="200" ctrllimited="true" ctrlrange="0 1"
+      range="0.7 1.5"
+      lmin="0.7" lmax="1.5"
+    />
   </default>
 
   <asset>
-    <texture type="skybox" builtin="gradient" rgb1="0.6 0.6 0.6" rgb2="0 0 0" width="512" height="512"/>
+    <texture
+      type="skybox" builtin="gradient" rgb1="0.6 0.6 0.6" rgb2="0 0 0" width="512" height="512"/>
 
     <texture name="texplane" type="2d" builtin="checker" rgb1=".25 .25 .25" rgb2=".3 .3 .3" width="128" height="128" mark="cross" markrgb=".8 .8 .8"/>
 

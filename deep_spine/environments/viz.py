@@ -25,12 +25,16 @@ class HeatmapGeom:
         ylabel = None,
         notext = False,
         W0 = None,
+        min_weight = -1,
+        max_weight = 1,
         spacing = 2.15
     ):
         self.size = size
         self.center = center
         self.W = W
         self.n = W.shape[0]
+        self.min_weight = min_weight
+        self.max_weight = max_weight
         self.xlabel = xlabel
         self.ylabel = ylabel
         self.notext = notext
@@ -41,34 +45,56 @@ class HeatmapGeom:
         for i in range(self.n):
             for j in range(self.n):
                 if self.W0 is not None:
-                    w = self.W[i][j] - self.W0[i][j]  # Compute raw w
-                    if w < 0:
-                        scale = w / -self.W0[i][j]
-                        R = 1 * (1 - scale)  # From 0 to 1
-                        G = 1 * (1 - scale)  # From 0 to 1
-                        B = 1  # Always blue
+                    delta_W = self.W[i][j] - self.W0[i][j]
+
+                    W_min_dev = self.min_weight - self.W0[i][j]
+                    W_max_dev = self.max_weight - self.W0[i][j]
+
+                    if delta_W < 0:
+                        scale = (delta_W - W_min_dev) / (-W_min_dev)
                     else:
-                        scale = w / (1 - self.W0[i][j])
-                        R = 1  # Always red
-                        G = 1 * (1 - scale)  # From 1 to 0
-                        B = 1 * (1 - scale)  # From 1 to 0
-                    w_rgba = np.array([R, G, B, 0.1])
+                        scale = delta_W / W_max_dev
+
                 else:
-                    w = self.W[i][j]
-                    if w <= 0.5:
-                        # Map [0, 0.5] to [blue, white]
-                        scale = w / 0.5
-                        R = 1 * scale  # From 0 to 1
-                        G = 1 * scale  # From 0 to 1
-                        B = 1  # Always blue
-                    else:
-                        # Map [0.5, 1] to [white, red]
-                        scale = (w - 0.5) / 0.5
-                        R = 1  # Always red
-                        G = 1 * (1 - scale)  # From 1 to 0
-                        B = 1 * (1 - scale)  # From 1 to 0
+                    scale = (
+                        (self.W[i][j] - self.min_weight) /
+                        (self.max_weight - self.min_weight)
+                    )
+
+                R = 1 if scale > 0.5 else 2 * scale
+                G = 2 * scale if scale < 0.5 else 2 * (1 - scale)
+                B = 1 if scale < 0.5 else 2 * (1 - scale)
 
                 w_rgba = np.array([R, G, B, 0.1])
+
+            #        w = self.W[i][j] - self.W0[i][j]  # Compute raw w
+            #        if w < 0:
+            #            scale = w / -self.W0[i][j]
+            #            R = 1 * (1 - scale)  # From 0 to 1
+            #            G = 1 * (1 - scale)  # From 0 to 1
+            #            B = 1  # Always blue
+            #        else:
+            #            scale = w / (1 - self.W0[i][j])
+            #            R = 1  # Always red
+            #            G = 1 * (1 - scale)  # From 1 to 0
+            #            B = 1 * (1 - scale)  # From 1 to 0
+            #        w_rgba = np.array([R, G, B, 0.1])
+            #    else:
+            #        w = self.W[i][j]
+            #        if w <= 0.5:
+            #            # Map [0, 0.5] to [blue, white]
+            #            scale = w / 0.5
+            #            R = 1 * scale  # From 0 to 1
+            #            G = 1 * scale  # From 0 to 1
+            #            B = 1  # Always blue
+            #        else:
+            #            # Map [0.5, 1] to [white, red]
+            #            scale = (w - 0.5) / 0.5
+            #            R = 1  # Always red
+            #            G = 1 * (1 - scale)  # From 1 to 0
+            #            B = 1 * (1 - scale)  # From 1 to 0
+
+            #    w_rgba = np.array([R, G, B, 0.1])
 
                 center = (
                     self.center
@@ -100,7 +126,7 @@ class HeatmapGeom:
                         mat=np.eye(3).flatten(),
                         rgba=np.array([0, 0, 0, 0])
                     )
-                    scene.geoms[scene.ngeom].label = f"{w:.2f}"
+                    scene.geoms[scene.ngeom].label = f"{self.W[i][j]:.2f}"
                     scene.ngeom += 1
 
                 if i == 0 and self.xlabel is not None:

@@ -20,6 +20,7 @@ class IaReflex(nn.Module):
         muscle_bias = 0,
         muscle_gain = 0,
         K = 0,
+        p = None,
         k_s = 0.1,
         k_d = 1.1,
         shunt_model='linear',
@@ -45,6 +46,7 @@ class IaReflex(nn.Module):
             K=K,
             k_s=k_s,
             k_d=k_d,
+            p=p,
             shunt_model=shunt_model,
             W_Ia=W_Ia,
         )

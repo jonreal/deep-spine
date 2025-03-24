@@ -111,6 +111,8 @@ class BaseEnvironment(object):
     def _initialize_mujoco(self):
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)
         self.data = mujoco.MjData(self.model)
+        mujoco.mj_resetData(self.model, self.data)
+        mujoco.mj_forward(self.model, self.data)
         self.cam = mujoco.MjvCamera()
         self.opt = mujoco.MjvOption()
 
@@ -212,7 +214,6 @@ class BaseEnvironment(object):
                 if packet:
                     self.container.mux(packet)
                 self.frame_count += 1
-
 
             glfw.swap_buffers(self.window)
             glfw.poll_events()

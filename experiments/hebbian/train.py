@@ -24,28 +24,29 @@ import deep_spine.utils.analysis_tools as tools
 import deep_spine.environments.viz as viz
 
 frame_rate = 10
-log_top_dir = './logs/force-investigation'
+log_top_dir = './logs/exp-3-24-2025'
 
 options = {
-    'num_eps': 25,
-    'eps_length': 90,
+    'num_eps': 50,
+    'eps_length': 180,
     'learning_rate': 100,
     'W0' : 0.2,
-    'lock_target': None,
+    'lock_target': False,
     'postive_only': False,
-    'min_weight': 0.01,
+    'min_weight': 0,
     'max_weight': 1,
     'seed': 1,
-    'damping': 0.5,
+    'damping': 1,
     'viscosity': 0,
     'muscle_strength_factor': 0.1,
     'muscle_increase_factor': 1.1,
     'babble_max_prob': 0.005,
     'hebbian_gain': 2,
-    'k_s': 0.3,
-    'k_d': 2.5,
-    'Ia_velocity_gain': 20,
-    'shunt_model': 'log'
+    'shunt_model': 'linear',
+    'p' : 1,
+    'k_s': 0.6,
+    'k_d': 1,
+    'Ia_velocity_gain': 10
 }
 
 now = time.time()
@@ -81,8 +82,6 @@ if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 
 sim_animation = f'./{log_dir}/sim'
-#sim_log = f'./{log_dir}/data/sim-data'
-#heb_log = f'./{log_dir}/data/heb-data'
 sim_log = None
 heb_log = None
 
@@ -96,14 +95,12 @@ if options['W0'] == 'identity':
 elif options['W0'] == 'identity_noise':
     W_Ia0 = torch.clip(
         0.5*torch.eye(6) + torch.normal(mean=0.05, std=0.01, size=(6, 6)),
-        0, 1
+        min_weight, max_weight
     )
 else:
     W_Ia0 = torch.normal(mean=options['W0'], std=0.01, size=(6, 6))
 
 env_kwargs = {
-    #'xml_path': 'arm26.xml',
-    #'xml_path': 'myo_sim/elbow/myoelbow_2dof6muscles.xml',
     'frame_rate': frame_rate,
     'save_frames_to_path': sim_animation,
     'render_in_background': False,
@@ -113,9 +110,6 @@ env_kwargs = {
     'muscle_strength_factor': options['muscle_strength_factor'],
     'babble_max_prob': options['babble_max_prob'],
     'babble_duration_range_sec': np.array([0.05, 0.1]),
-    #'elevation': -15,
-    #'azimuth': 0,
-    #'lookat': np.array([0.35, 0, 1])
     }
 spinal_kwargs =  {
     'decimation_factor':  1,
@@ -131,7 +125,8 @@ spinal_kwargs =  {
     'K': 0.3,
     'shunt_model': options['shunt_model'],
     'k_s': options['k_s'],
-    'k_d': options['k_d']
+    'k_d': options['k_d'],
+    'p': options['p']
 }
 
 hebbian_kwargs = {
@@ -139,6 +134,8 @@ hebbian_kwargs = {
     'learning_rate': options['learning_rate'],
     'lock_target': options['lock_target'],
     'postive_only': options['postive_only'],
+    'min_weight': options['min_weight'],
+    'max_weight': options['max_weight'],
     'Kmean': 0.00004,
     'Klearn': 0.001,
     'hp_cut': 0.05/(200/2)
@@ -249,8 +246,9 @@ try:
 
         tend = time.time()
         env.reset()
-        muscle_strength_factor = (
-            muscle_strength_factor * options['muscle_increase_factor']
+        muscle_strength_factor = np.clip(
+            muscle_strength_factor * options['muscle_increase_factor'],
+            0, 1
         )
         env.set_muscle_strength_factor(muscle_strength_factor)
         print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')

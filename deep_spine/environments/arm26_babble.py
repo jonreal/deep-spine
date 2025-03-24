@@ -184,10 +184,11 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-5*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.force,
+            source=self.spinal_layer.force_signed,
             ylabel='force',
             xlim=np.array([0, T]),
-            ylim=np.array([-1, 0])
+            ylim=np.array([-1, 1]),
+            ysymmetric=True
         )
         self.add_fig(fig)
         # act_II
@@ -295,7 +296,10 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.model.actuator_gainprm[:,3] = factor * self.max_muscle_strengths
 
     def initialize_spinal_layer(self, spinal_layer):
-        spinal_layer.initialize(self.model)
+        spinal_layer.initialize(self.model, self.data)
+        mujoco.mj_resetData(self.model,self.data)
+        mujoco.mj_forward(self.model, self.data)
+
         self.simulation_sampling_rate = 1 / self.model.opt.timestep
         mujoco.set_mjcb_control(spinal_layer.callback)
         return spinal_layer
@@ -304,11 +308,11 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.done = False
         self.reward = 0
         self.eps_reward = 0
-        #mj.mj_resetData(self.model, self.data)
+        #mujoco.mj_resetData(self.model, self.data)
         self.data.time = 0
         self.spinal_layer.set_descending_drive(np.zeros(self.spinal_layer.n,))
         self.babble_ic = self._gen_babble()
-        #mj.mj_forward(self.model, self.data)
+        #mujoco.mj_forward(self.model, self.data)
 
         large_prime = 78531
         self.seed = str(int(self.seed * large_prime * (self.eps + 1)))

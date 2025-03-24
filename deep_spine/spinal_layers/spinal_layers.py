@@ -6,6 +6,11 @@ import torch.nn.functional as F
 import deep_spine.spinal_layers.filters.iir as iir
 import deep_spine.spinal_layers.filters.fir as fir
 
+#class Neuron(nn.Module):
+#    def __init__(
+#        self,
+#        num_motor_units,
+
 class II(nn.Module):
     def __init__(
         self,
@@ -38,7 +43,6 @@ class Ia(nn.Module):
         self.II_gain = II_gain
         self.vel_gain = vel_gain
         self.saturation_constant = saturation_constant
-        self.k_leak = torch.tensor([0.5] * self.n)
         self.K = K
 
     def forward(self, velocity, act_II, act_muscle):
@@ -57,6 +61,7 @@ class aMN(nn.Module):
         K,
         k_s=0.1,
         k_d=1.1,
+        p=1,
         W_Ia=None,
         shunt_model='linear',
         seed=12345
@@ -90,6 +95,8 @@ class aMN(nn.Module):
         }
         self.shunt_model = shunt_models[shunt_model]
 
+        print(self.W_Ia)
+
 
     @torch.no_grad()
     def forward(self, act_Ia, descending_drive):
@@ -97,7 +104,7 @@ class aMN(nn.Module):
         for i in range(self.n):
             for j in range(self.n):
                 synaptic_act[i] += (
-                    act_Ia[j] * torch.clip(self.W_Ia[i, j], 0, 1)
+                    act_Ia[j] * torch.clip(self.W_Ia[i, j], -1, 1)
                 )
         activity = synaptic_act + descending_drive
         open_channels = torch.abs(activity)
@@ -117,6 +124,8 @@ class aMN(nn.Module):
     def power_shunt(self, open_channels):
         return self.k_s + self.k_d * open_channels**self.p
 
+    def exp_shunt(self, open_channels):
+        return self.k_s + self.k_d * np.exp(open_channels)
 
 class Muscle(nn.Module):
     def __init__(
@@ -132,3 +141,43 @@ class Muscle(nn.Module):
 
     def forward(self, act_aMN):
         return torch.clamp(self.gain * (act_aMN + self.bias), 0, 1)
+
+#class IN(nn.Module):
+#    def __init__(
+#        self,
+#        net_size,
+#        num_motor_units,
+#        num_sensory_units,
+#        polarity='excitatory',
+#        W_PA=None,
+#        W_IN=None,
+#
+#    ):
+#        super().__init__()
+#        self.net_size = net_size
+#        self.n = num_motor_units
+#        self.s = num_sensory_units
+#        self.polarity = polarity
+#
+#        if W_IN is None:
+#            self.W_IN = nn.Parameter(
+#                torch.normal(mean=0.3, std=0.03, size=(self.n, self.s)),
+#                requires_grad=False
+#            )
+#        else:
+#            self.W_IN = nn.Parameter(
+#                W_IN.clone().detach(),
+#                requires_grad=False
+#            )
+#
+#        if W_PA is None:
+#            self.W_PA = nn.Parameter(
+#                torch.normal(mean=0.3, std=0.03, size=(self.n, self.s)),
+#                requires_grad=False
+#            )
+#        else:
+#            self.W_PA = nn.Parameter(
+#                W_PA.clone().detach(),
+#                requires_grad=False
+#            )
+
