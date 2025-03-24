@@ -42,23 +42,27 @@ class HeatmapGeom:
         self.spacing = spacing
 
     def draw(self, scene):
+
         for i in range(self.n):
             for j in range(self.n):
                 if self.W0 is not None:
                     delta_W = self.W[i][j] - self.W0[i][j]
-
-                    W_min_dev = self.min_weight - self.W0[i][j]
-                    W_max_dev = self.max_weight - self.W0[i][j]
-
                     if delta_W < 0:
-                        scale = (delta_W - W_min_dev) / (-W_min_dev)
+                        scale = (
+                            0.5
+                            * (delta_W - (self.min_weight - self.W0[i][j]))
+                            / (self.W0[i][j] - self.min_weight)
+                        )
                     else:
-                        scale = delta_W / W_max_dev
-
+                        scale = (
+                            0.5
+                            + 0.5
+                            * (delta_W / (self.max_weight - self.W0[i][j]))
+                        )
                 else:
                     scale = (
-                        (self.W[i][j] - self.min_weight) /
-                        (self.max_weight - self.min_weight)
+                        (self.W[i][j] - self.min_weight)
+                        / (self.max_weight - self.min_weight)
                     )
 
                 R = 1 if scale > 0.5 else 2 * scale
@@ -66,35 +70,6 @@ class HeatmapGeom:
                 B = 1 if scale < 0.5 else 2 * (1 - scale)
 
                 w_rgba = np.array([R, G, B, 0.1])
-
-            #        w = self.W[i][j] - self.W0[i][j]  # Compute raw w
-            #        if w < 0:
-            #            scale = w / -self.W0[i][j]
-            #            R = 1 * (1 - scale)  # From 0 to 1
-            #            G = 1 * (1 - scale)  # From 0 to 1
-            #            B = 1  # Always blue
-            #        else:
-            #            scale = w / (1 - self.W0[i][j])
-            #            R = 1  # Always red
-            #            G = 1 * (1 - scale)  # From 1 to 0
-            #            B = 1 * (1 - scale)  # From 1 to 0
-            #        w_rgba = np.array([R, G, B, 0.1])
-            #    else:
-            #        w = self.W[i][j]
-            #        if w <= 0.5:
-            #            # Map [0, 0.5] to [blue, white]
-            #            scale = w / 0.5
-            #            R = 1 * scale  # From 0 to 1
-            #            G = 1 * scale  # From 0 to 1
-            #            B = 1  # Always blue
-            #        else:
-            #            # Map [0.5, 1] to [white, red]
-            #            scale = (w - 0.5) / 0.5
-            #            R = 1  # Always red
-            #            G = 1 * (1 - scale)  # From 1 to 0
-            #            B = 1 * (1 - scale)  # From 1 to 0
-
-            #    w_rgba = np.array([R, G, B, 0.1])
 
                 center = (
                     self.center

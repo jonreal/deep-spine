@@ -4,12 +4,12 @@ from scipy import signal
 from gymnasium import spaces
 import sys
 
-import deep_spine.spinal_layers.filters.iir as iir
+import deep_spine.spine.filters.iir as iir
 
 def normalize(x, xmin, xmax):
     return  (x - xmin) / (xmax - xmin)
 
-class BaseSpinalLayer:
+class BaseSpine:
     def __init__(
         self,
         decimation_factor = 1,
@@ -52,7 +52,7 @@ class BaseSpinalLayer:
         )
         self.mechanics_filters = [iir.IirFilt(b, a) for _ in range(3*self.n)]
 
-        self.initialize_layers()
+        self._initialize()
 
     def _sample_mechanics(self, data):
         for i in range(self.n):
@@ -62,7 +62,6 @@ class BaseSpinalLayer:
             self.scaled_velocity[i] = self.mechanics_filters[i+self.n].filter(
                 data.actuator_velocity[i] / self.L0[i]
             )
-
             self.length[i] = self.mechanics_filters[i].filter(
                 normalize(
                     self.scaled_length[i],
@@ -73,12 +72,10 @@ class BaseSpinalLayer:
             self.velocity[i] = self.mechanics_filters[i+self.n].filter(
                     self.scaled_velocity[i] / self.vmax[i]
             )
-
             self.force[i] = self.mechanics_filters[i+2*self.n].filter(
                 data.actuator_force[i]
             )
             self.force_signed[i] = ((-1.0) ** (i+1)) * self.force[i]
-
             self.activation[i] = data.act[i]
 
     def callback(self, model, data) -> None:
@@ -95,7 +92,7 @@ class BaseSpinalLayer:
         self.drive = drive
 
     @abstractmethod
-    def initialize_layers(self) -> None:
+    def _initialize(self) -> None:
         raise NotImplementedError("missing 'initialize_layers' method")
 
     @abstractmethod

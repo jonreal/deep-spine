@@ -2,7 +2,7 @@ import numpy as np
 from scipy import signal
 import torch
 import mujoco
-import deep_spine.spinal_layers.filters.iir as iir
+import deep_spine.spine.filters.iir as iir
 import deep_spine.environments.viz as viz
 
 class HebbianLearner:
@@ -126,7 +126,7 @@ class HebbianLearner:
         self.data_cache = data
         #data_str = ','.join(map('{:.6f}'.format, data))
         #print(data_str, file=self.logfile)
-        self.logfile.write(data.tobytes())
+        #self.logfile.write(data.tobytes())
 
         return self.dW
 

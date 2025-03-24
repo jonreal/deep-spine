@@ -3,8 +3,8 @@ import numpy as np
 from torch import nn
 import torch.nn.functional as F
 
-import deep_spine.spinal_layers.filters.iir as iir
-import deep_spine.spinal_layers.filters.fir as fir
+import deep_spine.spine.filters.iir as iir
+import deep_spine.spine.filters.fir as fir
 
 #class Neuron(nn.Module):
 #    def __init__(
@@ -141,43 +141,3 @@ class Muscle(nn.Module):
 
     def forward(self, act_aMN):
         return torch.clamp(self.gain * (act_aMN + self.bias), 0, 1)
-
-#class IN(nn.Module):
-#    def __init__(
-#        self,
-#        net_size,
-#        num_motor_units,
-#        num_sensory_units,
-#        polarity='excitatory',
-#        W_PA=None,
-#        W_IN=None,
-#
-#    ):
-#        super().__init__()
-#        self.net_size = net_size
-#        self.n = num_motor_units
-#        self.s = num_sensory_units
-#        self.polarity = polarity
-#
-#        if W_IN is None:
-#            self.W_IN = nn.Parameter(
-#                torch.normal(mean=0.3, std=0.03, size=(self.n, self.s)),
-#                requires_grad=False
-#            )
-#        else:
-#            self.W_IN = nn.Parameter(
-#                W_IN.clone().detach(),
-#                requires_grad=False
-#            )
-#
-#        if W_PA is None:
-#            self.W_PA = nn.Parameter(
-#                torch.normal(mean=0.3, std=0.03, size=(self.n, self.s)),
-#                requires_grad=False
-#            )
-#        else:
-#            self.W_PA = nn.Parameter(
-#                W_PA.clone().detach(),
-#                requires_grad=False
-#            )
-

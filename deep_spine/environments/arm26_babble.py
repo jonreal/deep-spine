@@ -5,7 +5,7 @@ import mujoco
 from stable_baselines3.common.callbacks import BaseCallback
 from deep_spine.environments.base_environment import BaseEnvironment
 import deep_spine.environments.viz as viz
-from deep_spine.spinal_layers.filters import iir
+from deep_spine.spine.filters import iir
 import gzip
 
 class Arm26Babble(BaseEnvironment, gym.Env):
@@ -13,15 +13,11 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self,
         path_to_logfile: Optional[str] = None,
         task: Optional[str] = '',
-        xcor_window: int = 10,
+        spine: Optional[Any] = None,
+        supraspine: Optional[Any] = None,
         muscle_strength_factor: float = 1,
-        babble_duration_range_sec = np.array([0.01, 0.1]),
-        babble_rise_time_range = np.array([0.5, 0.8]),
-        babble_max_prob: float = 0.1,
         episode_length: int = 100,
         seed: Optional[int] = 12345,
-        spinal_layer: Optional[Any] = None,
-        supraspinal_decimation_factor: int = 1,
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
@@ -54,7 +50,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         else:
             self.logfile = None
 
-        self.spinal_layer = self.initialize_spinal_layer(spinal_layer)
+        self.spine = self.initialize_spine(spine)
+        self.supraspine = self.initialize_supraspine(supraspine)
+
         self.episode_length = episode_length
         self.simulation_steps_per_episode = (
             self.episode_length * self.simulation_sampling_rate
@@ -69,33 +67,15 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed)
 
-        self.supraspinal_decimation_factor = supraspinal_decimation_factor
         self.max_muscle_strengths = self.model.actuator_gainprm[:,3].copy()
         self.muscle_strength_factor = np.array([muscle_strength_factor])
         self.set_muscle_strength_factor(self.muscle_strength_factor)
 
-        self.babble_duration_range = babble_duration_range_sec
-        self.babble_rise_time_range = babble_rise_time_range
-        self.babble_max_prob = babble_max_prob
-
-        self.babble_signal = np.zeros(self.spinal_layer.n,)
-        self.babble_prob = np.zeros(self.spinal_layer.n,)
-        self.babble_t0 = np.zeros(self.spinal_layer.n,)
-        self.babble_amp = np.zeros(self.spinal_layer.n,)
-        self.babble_duration = np.zeros(self.spinal_layer.n,)
-        self.babble_rise_time = np.zeros(self.spinal_layer.n,)
-        self.babble_filter = [
-            iir.IirFilt(
-                [0, self.babble_rise_time_range[0]],
-                [1, self.babble_rise_time_range[0] - 1]
-            ) for i in range(self.spinal_layer.n)
-        ]
-
         # Cache for the tb log file
         self.log_eps = 0
         self.log_eps_reward = 0
-        self.log_babble_step = np.zeros((self.spinal_layer.n, 2))
-        self.log_babble_amp = np.zeros(self.spinal_layer.n,)
+        #self.log_babble_step = np.zeros((self.spinal_layer.n, 2))
+        #self.log_babble_amp = np.zeros(self.spinal_layer.n,)
 
         # ---
         # Figures
@@ -105,18 +85,22 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         W_Ia_heatmap = viz.HeatmapGeom(
             center= lookat + np.array([-0.92, -1.2, -0.10]),
             size=0.05,
-            W=spinal_layer.net.aMN.W_Ia,
+            min_weight=0,
+            max_weight=1,
+            W=spine.net.aMN.W_Ia,
             xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
             ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
         )
         self.add_geom(W_Ia_heatmap)
 
-        W0 = spinal_layer.net.aMN.W_Ia.clone().detach()
+        W0 = spine.net.aMN.W_Ia.clone().detach()
         diffW_Ia_heatmap = viz.HeatmapGeom(
             center= lookat + np.array([-0.8, -2.1, -5]),
             size=0.03,
-            W=spinal_layer.net.aMN.W_Ia,
+            W=spine.net.aMN.W_Ia,
             W0=W0,
+            min_weight=0,
+            max_weight=1,
             notext=True,
             spacing=2
         )
@@ -161,7 +145,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-3*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.length,
+            source=self.spine.length,
             ylabel='len',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1])
@@ -172,7 +156,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-4*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.velocity,
+            source=self.spine.velocity,
             ylabel='vel',
             xlim=np.array([0, T]),
             ylim=np.array([-0.1, 0.1]),
@@ -184,7 +168,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-5*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.force_signed,
+            source=self.spine.force_signed,
             ylabel='force',
             xlim=np.array([0, T]),
             ylim=np.array([-1, 1]),
@@ -196,7 +180,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-6*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.act_II,
+            source=self.spine.act_II,
             ylabel='act_II',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
@@ -208,7 +192,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-7*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.act_Ia,
+            source=self.spine.act_Ia,
             ylabel='act_Ia',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
@@ -220,8 +204,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-8*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.babble_signal,
-            ylabel='babble',
+            source=self.supraspine.drive,
+            ylabel='drive',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
             gridsize=np.array([2, 3])
@@ -232,7 +216,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-9*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.act_aMN,
+            source=self.spine.act_aMN,
             ylabel='MN',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
@@ -244,7 +228,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-10*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.act_muscle,
+            source=self.spine.act_muscle,
             ylabel='act_MN',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
@@ -256,7 +240,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             viewport=mujoco.MjrRect(xs, ys-11*H, W, H),
             ntraces=6,
             window=self.N,
-            source=self.spinal_layer.activation,
+            source=self.spine.activation,
             ylabel='act',
             xlim=np.array([0, T]),
             ylim=np.array([0, 1]),
@@ -295,72 +279,73 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.muscle_strength_factor[:] = factor
         self.model.actuator_gainprm[:,3] = factor * self.max_muscle_strengths
 
-    def initialize_spinal_layer(self, spinal_layer):
-        spinal_layer.initialize(self.model, self.data)
+    def initialize_spine(self, spine):
+        spine.initialize(self.model, self.data)
         mujoco.mj_resetData(self.model,self.data)
         mujoco.mj_forward(self.model, self.data)
-
         self.simulation_sampling_rate = 1 / self.model.opt.timestep
-        mujoco.set_mjcb_control(spinal_layer.callback)
-        return spinal_layer
+        mujoco.set_mjcb_control(spine.callback)
+        return spine
+
+    def initialize_supraspine(self, supraspine):
+        supraspine.initialize(self.model, self.data)
+        return supraspine
 
     def _set_initial_conditions(self):
         self.done = False
-        self.reward = 0
-        self.eps_reward = 0
         #mujoco.mj_resetData(self.model, self.data)
         self.data.time = 0
-        self.spinal_layer.set_descending_drive(np.zeros(self.spinal_layer.n,))
-        self.babble_ic = self._gen_babble()
+        self.spine.set_descending_drive(np.zeros(self.spine.n,))
         #mujoco.mj_forward(self.model, self.data)
 
         large_prime = 78531
         self.seed = str(int(self.seed * large_prime * (self.eps + 1)))
         self.seed = int(self.seed[:5])
         self.ic_rng = np.random.default_rng(self.seed)
+        self.supraspine.update_seed(self.seed)
         self.simulation_steps = 0
 
-    def _gen_babble(self):
-        if self.task == 'babble':
-            for i in range(self.spinal_layer.n):
-                if (self.data.time
-                    >= self.babble_duration[i] + self.babble_t0[i]
-                ) or (
-                    self.babble_prob[i] == 0
-                ) or (
-                    self.data.time == 0
-                ):
-                    self.babble_prob[i] = (
-                        self.ic_rng.uniform(0, 1) <= self.babble_max_prob
-                    )
-                    if self.babble_prob[i]:
-                        self.babble_t0[i] = self.data.time
-                        self.babble_amp[i] = (
-                            self.ic_rng.uniform(0, 1)
-                        )
-                        self.babble_duration[i] = self.ic_rng.uniform(
-                            self.babble_duration_range[0],
-                            self.babble_duration_range[1]
-                        )
-                        self.babble_rise_time[i] = self.ic_rng.uniform(
-                            self.babble_rise_time_range[0],
-                            self.babble_rise_time_range[1]
-                        )
-                        self.babble_filter[i] = iir.IirFilt(
-                                [0, self.babble_rise_time[i]],
-                                [1, self.babble_rise_time[i] - 1]
-                        )
-        else:
-            raise ValueError(f"Invalid task: {self.task}")
-
-    def _update_babble(self):
-        self.babble_signal[:] = np.array([
-            self.babble_prob[i]
-            * self.babble_amp[i]
-            * self.babble_filter[i].filter(
-                self.data.time <= self.babble_duration[i] + self.babble_t0[i]
-            ) for i in range(self.spinal_layer.n)
-        ])
+#    def _gen_babble(self):
+#        if self.task == 'babble':
+#            for i in range(self.spinal_layer.n):
+#                if (self.data.time
+#                    >= self.babble_duration[i] + self.babble_t0[i]
+#                ) or (
+#                    self.babble_prob[i] == 0
+#                ) or (
+#                    self.data.time == 0
+#                ):
+#                    self.babble_prob[i] = (
+#                        self.ic_rng.uniform(0, 1) <= self.babble_max_prob
+#                    )
+#                    if self.babble_prob[i]:
+#                        self.babble_t0[i] = self.data.time
+#                        self.babble_amp[i] = (
+#                            self.ic_rng.uniform(0, 1)
+#                        )
+#                        self.babble_duration[i] = self.ic_rng.uniform(
+#                            self.babble_duration_range[0],
+#                            self.babble_duration_range[1]
+#                        )
+#                        self.babble_rise_time[i] = self.ic_rng.uniform(
+#                            self.babble_rise_time_range[0],
+#                            self.babble_rise_time_range[1]
+#                        )
+#                        self.babble_filter[i] = iir.IirFilt(
+#                                [0, self.babble_rise_time[i]],
+#                                [1, self.babble_rise_time[i] - 1]
+#                        )
+#        else:
+#            raise ValueError(f"Invalid task: {self.task}")
+#
+#    def _update_babble(self):
+#        self.babble_signal[:] = np.array([
+#            self.babble_prob[i]
+#            * self.babble_amp[i]
+#            * self.babble_filter[i].filter(
+#                self.data.time <= self.babble_duration[i] + self.babble_t0[i]
+#            ) for i in range(self.spinal_layer.n)
+#        ])
 
 
     def _update_status(self):
@@ -370,16 +355,20 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def step(self, action):
         self.reward = 0
-        self.spinal_layer.set_descending_drive(self.babble_signal)
-        for steps in range(self.supraspinal_decimation_factor):
+        #self.spinal_layer.set_descending_drive(self.babble_signal)
+
+        drive = self.supraspine.forward(self.data);
+        self.spine.set_descending_drive(drive)
+
+        for steps in range(self.supraspine.decimation_factor):
             mujoco.mj_step(self.model, self.data)
             self.simulation_steps += 1
             self._update_figures()
             self._render()
             self._update_status()
             self._write_data_to_logfile()
-            self._update_babble()
-            self._gen_babble()
+            #self._update_babble()
+            #self._gen_babble()
 
         self.eps_reward += (self.reward / self.simulation_sampling_rate)
         truncated = False
@@ -410,15 +399,15 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             data = np.concatenate([
                 self.data.qpos,
                 self.data.qvel,
-                self.spinal_layer.length,
-                self.spinal_layer.velocity,
-                self.spinal_layer.force,
-                self.spinal_layer.act_II,
-                self.spinal_layer.act_Ia,
-                self.babble_signal,
-                self.spinal_layer.act_aMN,
-                self.spinal_layer.act_muscle,
-                self.spinal_layer.activation,
+                self.spine.length,
+                self.spine.velocity,
+                self.spine.force,
+                self.spine.act_II,
+                self.spine.act_Ia,
+                self.supraspine.drive,
+                self.spine.act_aMN,
+                self.spine.act_muscle,
+                self.spine.activation,
             ])
             # As a string
             #data_str = ','.join(map('{:.6f}'.format, data))

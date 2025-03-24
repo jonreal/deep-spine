@@ -5,8 +5,8 @@ from torch import nn
 import numpy as np
 from functools import partial
 
-from deep_spine.spinal_layers.base_spinal_layer import BaseSpinalLayer
-from deep_spine.spinal_layers.spinal_layers import *
+from deep_spine.spine.base_spine import BaseSpine
+from deep_spine.spine.spinal_layers import *
 
 class IaReflex(nn.Module):
     def __init__(
@@ -73,7 +73,7 @@ class IaReflex(nn.Module):
 
         return act_II, act_Ia, act_aMN, act_muscle
 
-class IaReflexSpinalLayer(BaseSpinalLayer):
+class IaReflexSpine(BaseSpine):
     def __init__(
         self,
         **iareflex_kwargs
@@ -84,10 +84,10 @@ class IaReflexSpinalLayer(BaseSpinalLayer):
             ]
         }
         super().__init__(**base_args)
-        self.type = 'ia_reflex_spinal_layer'
+        self.type = 'ia_reflex'
         self.kwargs = iareflex_kwargs
 
-    def initialize_layers(self):
+    def _initialize(self):
         self.net = IaReflex(num_motor_units=self.n, **self.kwargs)
 
         self.act_II = np.zeros(self.n)

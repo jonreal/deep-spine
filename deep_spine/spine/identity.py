@@ -1,9 +1,9 @@
 import numpy as np
 from gymnasium import spaces
-from deep_spine.spinal_layers.base_spinal_layer import BaseSpinalLayer
+from deep_spine.spine.base_spine import BaseSpine
 
 
-class IdentitySpinalLayer(BaseSpinalLayer):
+class IdentitySpine(BaseSpine):
     def __init__(
         self,
         decimation_factor: int = 1,
@@ -13,15 +13,12 @@ class IdentitySpinalLayer(BaseSpinalLayer):
             decimation_factor=decimation_factor,
             mechanics_filter_cutoff=mechanics_filter_cutoff
         );
-        self.type = 'identity_spinal_layer'
+        self.type = 'identity'
 
     def forward(self, data) -> np.ndarray:
         self._sample_mechanics(data)
 
         # Identity - suprapinal effenent is motor unit activation
-        self.muscle_activations = self.efferent_signals
+        self.act_muscle = self.drive
 
-        return self.muscle_activations
-
-    def set_efferent(self, efferent) -> None:
-        self.efferent_signals = efferent
+        return self.act_muscle

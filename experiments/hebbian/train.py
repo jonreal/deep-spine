@@ -19,7 +19,8 @@ from deep_spine import (
 
 from deep_spine import HebbianLearner
 from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
-from deep_spine.spinal_layers.ia_reflex import IaReflexSpinalLayer
+from deep_spine.spine.ia_reflex import IaReflexSpine
+from deep_spine.supraspine.babble import Babble
 import deep_spine.utils.analysis_tools as tools
 import deep_spine.environments.viz as viz
 
@@ -40,13 +41,13 @@ options = {
     'viscosity': 0,
     'muscle_strength_factor': 0.1,
     'muscle_increase_factor': 1.1,
-    'babble_max_prob': 0.005,
     'hebbian_gain': 2,
     'shunt_model': 'linear',
     'p' : 1,
     'k_s': 0.6,
     'k_d': 1,
-    'Ia_velocity_gain': 10
+    'Ia_velocity_gain': 10,
+    'babble_max_prob': 0.005
 }
 
 now = time.time()
@@ -108,10 +109,10 @@ env_kwargs = {
     'task': 'babble',
     'episode_length': options['eps_length'],
     'muscle_strength_factor': options['muscle_strength_factor'],
-    'babble_max_prob': options['babble_max_prob'],
-    'babble_duration_range_sec': np.array([0.05, 0.1]),
+
     }
-spinal_kwargs =  {
+
+spine_kwargs =  {
     'decimation_factor':  1,
     'mechanics_filter_cutoff':  0.0,
     'II_length_gain': 1.25,
@@ -129,6 +130,14 @@ spinal_kwargs =  {
     'p': options['p']
 }
 
+supraspine_kwargs = {
+    'decimation_factor': 1,
+    'babble_max_prob': options['babble_max_prob'],
+    'babble_duration_range': np.array([0.05, 0.1]),
+    'babble_rise_time_range': np.array([0.5, 0.8]),
+    'seed': options['seed']
+}
+
 hebbian_kwargs = {
     'gain': options['hebbian_gain'],
     'learning_rate': options['learning_rate'],
@@ -144,7 +153,8 @@ hebbian_kwargs = {
 all_args = {
     'options': options,
     'env_kwargs': env_kwargs,
-    'spinal_kwargs': spinal_kwargs,
+    'spine_kwargs': spine_kwargs,
+    'supraspine_kwargs': supraspine_kwargs,
     'hebbian_kwargs': hebbian_kwargs,
 }
 
@@ -171,10 +181,11 @@ with open(log_dir + '/settings.txt', 'w') as f:
 #with open(log_dir + '/settings.txt', 'w') as f:
 #    pprint(all_args, stream=f)
 
-spinal_layer = IaReflexSpinalLayer(**spinal_kwargs)
-env = Arm26Babble(spinal_layer=spinal_layer,**env_kwargs)
+spine = IaReflexSpine(**spine_kwargs)
+supraspine = Babble(**supraspine_kwargs)
+env = Arm26Babble(spine=spine, supraspine=supraspine, **env_kwargs)
 learner = HebbianLearner(
-    W=spinal_layer.net.aMN.W_Ia,
+    W=spine.net.aMN.W_Ia,
     **hebbian_kwargs
 )
 
@@ -240,8 +251,8 @@ try:
         while not done:
             _, _, done, _, _ = env.step(action=None)
             learner.step(
-                pre_synaptic=spinal_layer.act_Ia,
-                post_synaptic=spinal_layer.act_aMN
+                pre_synaptic=spine.act_Ia,
+                post_synaptic=spine.act_aMN
             )
 
         tend = time.time()
