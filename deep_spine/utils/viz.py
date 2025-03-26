@@ -42,7 +42,6 @@ class HeatmapGeom:
         self.spacing = spacing
 
     def draw(self, scene):
-
         for i in range(self.n):
             for j in range(self.n):
                 if self.W0 is not None:
@@ -241,7 +240,6 @@ class BarsFigure:
         if xlim is not None:
             self.figure.range[0][0] = xlim[0]
             self.figure.range[0][1] = xlim[1]
-
         if ylim is not None:
             self.figure.range[1][0] = -1
             self.figure.range[1][1] = nbars
@@ -257,4 +255,136 @@ class BarsFigure:
             self.figure.linedata[i][:4:2] = np.array([0, self.source[i]])
         self.figure.selection = self.source[0]
         self.figure.title = f'{self.title}, {self.source[0]:.2f}'
+
+
+def make_spine_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
+    traces = [
+        ('qpos', data.qpos, 2, [-0.25, 0.25], True),
+        ('qvel', data.qvel, 2, [-0.5, 0.5], False),
+        ('len', spine.length, spine.n, [0, 1], False),
+        ('vel', spine.velocity, spine.n, [-0.1, 0.1], True),
+        ('force', spine.force_signed, spine.n, [-100, 100], True),
+        ('drive', supraspine.drive, supraspine.n, [0, 1], False),
+        ('act_II', spine.act_II, spine.n, [0, 1], False),
+        ('act_Ia', spine.act_Ia, spine.n, [0, 1], False),
+        ('MN', spine.act_aMN, spine.n, [0, 1], False),
+        ('act_MN', spine.act_muscle, spine.n, [0, 1], False),
+        ('act', spine.act, spine.n, [0, 1], False),
+    ]
+    N = int(T / timestep)
+    figs = []
+    for i, (label, source, n, ylim, ysymmetric) in enumerate(traces):
+        figs.append(
+            TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys - (i+1)*H, W, H),
+                ntraces=n,
+                window=N,
+                source=source,
+                ylabel=label,
+                xlim=np.array([0, T]),
+                ylim=ylim,
+                yformat='%.2f',
+                ysymmetric=ysymmetric,
+                gridsize=np.array([2, 3])
+            )
+        )
+    #xlabel
+    fig = TracesFigure(
+        viewport=mujoco.MjrRect(xs, ys-11*H - 20, W, 10),
+        ntraces=0,
+        window=N,
+        xlim=np.array([-T, 0])
+    )
+    fig.figure.yformat = ''
+    fig.figure.flg_ticklabel[0] = 1
+    fig.figure.flg_ticklabel[1] = 1
+    figs.append(fig)
+    return figs
+
+def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
+                     showlabel=True):
+    traces = [
+        ('pre', learner.pre_synaptic, learner.pre_synaptic.shape[0],
+            [0, 1], False),
+        ('post*', learner.post_dev, learner.post_dev.shape[0],
+            [-0.25, 1.75], False),
+        ('L_1j', learner.learning_signal[0][:],
+            learner.learning_signal[0][:].shape[0],
+            [-0.001, 0.001], False),
+        ('L_2j', learner.learning_signal[1][:],
+            learner.learning_signal[1][:].shape[0],
+            [-0.001, 0.001], False),
+        ('L_3j', learner.learning_signal[2][:],
+            learner.learning_signal[2][:].shape[0],
+            [-0.001, 0.001], False),
+        ('L_4j', learner.learning_signal[3][:],
+            learner.learning_signal[3][:].shape[0],
+            [-0.001, 0.001], False),
+        ('L_5j', learner.learning_signal[4][:],
+            learner.learning_signal[4][:].shape[0],
+            [-0.001, 0.001], False),
+        ('L_6j', learner.learning_signal[5][:],
+            learner.learning_signal[5][:].shape[0],
+            [-0.001, 0.001], False),
+    ]
+    N = int(T / timestep)
+    figs = []
+    for i, (label, source, n, ylim, ysymmetric) in enumerate(traces):
+        if not showlabel:
+            label = None
+        figs.append(
+            TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys - (i+1)*H, W, H),
+                ntraces=n,
+                window=N,
+                source=source,
+                ylabel=label,
+                xlim=np.array([0, T]),
+                ylim=ylim,
+                yformat='%.3f',
+                ysymmetric=ysymmetric,
+                gridsize=np.array([2, 3])
+            )
+        )
+
+    if legend:
+        fig = TracesFigure(
+            viewport=mujoco.MjrRect(
+                xs+W, ys -int(2.1*H), int(W/3.5), int(2.1*H)
+            ),
+            ntraces=learner.learning_signal[5][:].numel(),
+            window=N,
+            source=None,
+            xlim=np.array([0, T]),
+            ylim=np.array([-20, -1]),
+            yformat='%.5f'
+        )
+        figs.append(fig)
+
+    fig = TracesFigure(
+        viewport=mujoco.MjrRect(xs, ys-7*H - 90, W, 10),
+        ntraces=0,
+        window=N,
+        xlim=np.array([-T, 0])
+    )
+    figs.append(fig)
+
+    figs[-1].figure.yformat = ''
+    figs[-1].figure.flg_ticklabel[0] = 1
+    figs[-1].figure.flg_ticklabel[1] = 1
+
+    if legend:
+        figs[-2].figure.flg_legend = 1
+        figs[-2].figure.linename[0] = 'SF'
+        figs[-2].figure.linename[1] = 'SE'
+        figs[-2].figure.linename[2] = 'EF'
+        figs[-2].figure.linename[3] = 'EE'
+        figs[-2].figure.linename[4] = 'BF'
+        figs[-2].figure.linename[5] = 'BE'
+        figs[-2].figure.flg_ticklabel[0] = 0
+        figs[-2].figure.flg_ticklabel[1] = 0
+        figs[-2].figure.flg_extend = 0
+    figs[1].figure.flg_extend = 0
+
+    return figs
 

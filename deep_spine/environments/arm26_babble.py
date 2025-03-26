@@ -3,10 +3,11 @@ import gymnasium as gym
 import numpy as np
 import mujoco
 from stable_baselines3.common.callbacks import BaseCallback
-from deep_spine.environments.base_environment import BaseEnvironment
-import deep_spine.environments.viz as viz
-from deep_spine.spine.filters import iir
 import gzip
+
+from deep_spine.environments.base_environment import BaseEnvironment
+import deep_spine.utils.viz as viz
+from deep_spine.spine.filters import iir
 
 class Arm26Babble(BaseEnvironment, gym.Env):
     def __init__(
@@ -23,6 +24,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         save_frames_to_path: Optional[str] = None,
         render_in_background: bool = False,
         render_lossless: bool = False,
+        window_width: int = 1200,
+        window_height: int = 900,
         azimuth: int = 180,
         elevation: int = -90,
         distance: int = 2.5,
@@ -31,13 +34,14 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
         self.type = 'arm26babble'
         self.task = task
-
         super().__init__(
             xml_path=xml_path,
             frame_rate=frame_rate,
             save_frames_to_path=save_frames_to_path,
             render_in_background=render_in_background,
             render_lossless=render_lossless,
+            window_width=window_width,
+            window_height=window_height,
             azimuth=azimuth,
             elevation=elevation,
             distance=distance,
@@ -74,206 +78,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         # Cache for the tb log file
         self.log_eps = 0
         self.log_eps_reward = 0
-        #self.log_babble_step = np.zeros((self.spinal_layer.n, 2))
-        #self.log_babble_amp = np.zeros(self.spinal_layer.n,)
 
-        # ---
-        # Figures
-        # ---
-
-        # Weight matrix visualization
-        W_Ia_heatmap = viz.HeatmapGeom(
-            center= lookat + np.array([-0.92, -1.2, -0.10]),
-            size=0.05,
-            min_weight=0,
-            max_weight=1,
-            W=spine.net.aMN.W_Ia,
-            xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
-            ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
-        )
-        self.add_geom(W_Ia_heatmap)
-
-        W0 = spine.net.aMN.W_Ia.clone().detach()
-        diffW_Ia_heatmap = viz.HeatmapGeom(
-            center= lookat + np.array([-0.8, -2.1, -5]),
-            size=0.03,
-            W=spine.net.aMN.W_Ia,
-            W0=W0,
-            min_weight=0,
-            max_weight=1,
-            notext=True,
-            spacing=2
-        )
-        self.add_geom(diffW_Ia_heatmap)
-
-
-        # Vertical Stack of Trace Monitors
-        self.figs = []
-        T = 1
-        H = 80;
-        W = 300
-        xs = 900
-        ys = 900
-        self.N = int(T / self.model.opt.timestep)
-
-        # qpos
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-H, W, H),
-            ntraces=2,
-            window=self.N,
-            source=self.data.qpos,
-            ylabel='qpos',
-            xlim=np.array([0, T]),
-            ylim=np.array([-0.25, 0.25]),
-            ysymmetric=True
-        )
-        self.add_fig(fig)
-        # qvel
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-2*H, W, H),
-            ntraces=2,
-            window=self.N,
-            source=self.data.qvel,
-            ylabel='qvel',
-            xlim=np.array([0, T]),
-            ylim=np.array([-0.1, 0.1]),
-            ysymmetric=True
-        )
-        self.add_fig(fig)
-        # length
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-3*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.length,
-            ylabel='len',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1])
-        )
-        self.add_fig(fig)
-        # velocity
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-4*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.velocity,
-            ylabel='vel',
-            xlim=np.array([0, T]),
-            ylim=np.array([-0.1, 0.1]),
-            ysymmetric=True
-        )
-        self.add_fig(fig)
-        # force
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-5*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.force_signed,
-            ylabel='force',
-            xlim=np.array([0, T]),
-            ylim=np.array([-1, 1]),
-            ysymmetric=True
-        )
-        self.add_fig(fig)
-        # act_II
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-6*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.act_II,
-            ylabel='act_II',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-        )
-        self.add_fig(fig)
-        # act_Ia
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-7*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.act_Ia,
-            ylabel='act_Ia',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-        )
-        self.add_fig(fig)
-        # babble_signal
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-8*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.supraspine.drive,
-            ylabel='drive',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-        )
-        self.add_fig(fig)
-        # act_aMN
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-9*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.act_aMN,
-            ylabel='MN',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-            )
-        self.add_fig(fig)
-        # act_muscle
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-10*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.act_muscle,
-            ylabel='act_MN',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-        )
-        self.add_fig(fig)
-        # activation
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-11*H, W, H),
-            ntraces=6,
-            window=self.N,
-            source=self.spine.activation,
-            ylabel='act',
-            xlim=np.array([0, T]),
-            ylim=np.array([0, 1]),
-            gridsize=np.array([2, 3])
-        )
-        self.add_fig(fig)
-
-        #xlabel
-        fig = viz.TracesFigure(
-            viewport=mujoco.MjrRect(xs, ys-11*H - 20, W, 10),
-            ntraces=0,
-            window=self.N,
-            xlim=np.array([-T, 0])
-        )
-        fig.figure.yformat = ''
-        fig.figure.flg_ticklabel[0] = 1
-        fig.figure.flg_ticklabel[1] = 1
-        self.add_fig(fig)
-
-        # Muscle Strength Factor
-        fig = viz.BarsFigure(
-            viewport=mujoco.MjrRect(220, 0, 150, 100),
-            nbars=1,
-            title=f'Muscle Strength',
-            source=self.muscle_strength_factor,
-            ylim=np.array([-1, 1]),
-            xlim=np.array([0, 1]),
-            gridsize=np.array([5, 2]),
-            ysymmetric=True
-        )
-        fig.figure.flg_selection = 1
-        fig.figure.selection = self.muscle_strength_factor
-        self.add_fig(fig)
 
     def set_muscle_strength_factor(self, factor):
         self.muscle_strength_factor[:] = factor

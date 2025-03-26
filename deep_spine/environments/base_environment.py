@@ -21,6 +21,8 @@ class BaseEnvironment(object):
         save_frames_to_path: Optional[str] = None,
         render_in_background: bool = False,
         render_lossless: bool = False,
+        window_width: int = 1200,
+        window_height: int = 900,
         azimuth: int = 180,
         elevation: int = -90,
         distance: int = 2,
@@ -37,7 +39,10 @@ class BaseEnvironment(object):
 
         if self.frame_rate:
             self.render_lossless = render_lossless
-            self._initialize_render(azimuth, elevation, distance, lookat)
+            self._initialize_render(
+                window_width, window_height, azimuth,
+                elevation, distance, lookat
+            )
             if render_in_background:
                 mujoco.mjr_setBuffer(
                     mujoco.mjtFramebuffer.mjFB_OFFSCREEN, self.context
@@ -116,7 +121,9 @@ class BaseEnvironment(object):
         self.cam = mujoco.MjvCamera()
         self.opt = mujoco.MjvOption()
 
-    def _initialize_render(self, azimuth, elevation, distance, lookat):
+    def _initialize_render(
+        self, window_width, window_height, azimuth, elevation, distance, lookat
+        ):
         mujoco.mjv_defaultCamera(self.cam)
         mujoco.mjv_defaultOption(self.opt)
         self.cam.azimuth = azimuth
@@ -124,9 +131,10 @@ class BaseEnvironment(object):
         self.cam.distance = distance
         self.cam.lookat = lookat
         glfw.init()
+        print(window_width, window_height)
         self.window = glfw.create_window(
-            1200,
-            900,
+            window_width,
+            window_height,
             f'{self.type}-{self.task}',
             None,
             None

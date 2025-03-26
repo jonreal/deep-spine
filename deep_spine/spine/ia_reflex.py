@@ -89,7 +89,6 @@ class IaReflexSpine(BaseSpine):
 
     def _initialize(self):
         self.net = IaReflex(num_motor_units=self.n, **self.kwargs)
-
         self.act_II = np.zeros(self.n)
         self.act_Ia = np.zeros(self.n)
         self.act_aMN = np.zeros(self.n)
@@ -98,7 +97,7 @@ class IaReflexSpine(BaseSpine):
     def forward(self, data) -> np.ndarray:
         self._sample_mechanics(data)
         features = np.concatenate(
-            [self.length, self.velocity, self.activation, self.drive]
+            [self.length, self.velocity, self.act, self.drive]
         )
         features = torch.tensor(features, dtype=torch.float32)
         act_II, act_Ia, act_aMN, act_muscle = (

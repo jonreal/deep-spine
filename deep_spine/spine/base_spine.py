@@ -43,7 +43,7 @@ class BaseSpine:
         self.force_signed = np.zeros(self.n)
 
         # allocate the spinal signals
-        self.activation = np.zeros(self.n) # current activation of muscles
+        self.act = np.zeros(self.n) # current activation of muscles
         self.drive = np.zeros(self.n) # descending drive to muscles
 
         b, a = (
@@ -76,7 +76,7 @@ class BaseSpine:
                 data.actuator_force[i]
             )
             self.force_signed[i] = ((-1.0) ** (i+1)) * self.force[i]
-            self.activation[i] = data.act[i]
+            self.act[i] = data.act[i]
 
     def callback(self, model, data) -> None:
         if (self.simulation_frame_count == self.decimation_factor

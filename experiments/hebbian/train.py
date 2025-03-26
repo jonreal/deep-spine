@@ -13,16 +13,16 @@ import mujoco
 from pprint import pprint
 import json
 
-from deep_spine import (
-    Arm26Babble
-)
-
+from deep_spine import Arm26Babble
 from deep_spine import HebbianLearner
-from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
+
 from deep_spine.spine.ia_reflex import IaReflexSpine
 from deep_spine.supraspine.babble import Babble
-import deep_spine.utils.analysis_tools as tools
-import deep_spine.environments.viz as viz
+
+from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
+
+import deep_spine.utils.viz as viz
+from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
 
 frame_rate = 10
 log_top_dir = './logs/exp-3-24-2025'
@@ -109,7 +109,9 @@ env_kwargs = {
     'task': 'babble',
     'episode_length': options['eps_length'],
     'muscle_strength_factor': options['muscle_strength_factor'],
-
+    'window_width': 1200,
+    'window_height': 900,
+    'lookat': np.array([0.45, -0.2, -0.5]),
     }
 
 spine_kwargs =  {
@@ -184,27 +186,99 @@ with open(log_dir + '/settings.txt', 'w') as f:
 spine = IaReflexSpine(**spine_kwargs)
 supraspine = Babble(**supraspine_kwargs)
 env = Arm26Babble(spine=spine, supraspine=supraspine, **env_kwargs)
-learner = HebbianLearner(
-    W=spine.net.aMN.W_Ia,
-    **hebbian_kwargs
-)
+learner = HebbianLearner(W=spine.net.aMN.W_Ia, **hebbian_kwargs)
 
-# Figures for hebian
-heb_figs = HebbianMonitorFigure(
-    xs=20,
-    ys=580,
-    H=80,
-    W=200,
-    T=1,
-    sim_timestep=env.model.opt.timestep,
-    source=learner
+
+figs = make_spine_viz(
+    data=env.data, spine=spine, supraspine=supraspine,
+    xs=900, ys=900, T=1, H=80, W=300,
+    timestep=env.model.opt.timestep
 )
-for heb_fig in heb_figs.figs:
-    env.add_fig(heb_fig)
+for fig in figs:
+    env.add_fig(fig)
+
+figs = make_hebbian_viz(
+    learner=learner,
+    xs=200, ys=540, T=1, H=65, W=180,
+    timestep=env.model.opt.timestep, legend=True, showlabel=False
+)
+for fig in figs:
+    env.add_fig(fig)
+
+figs = make_hebbian_viz(
+    learner=learner,
+    xs=20, ys=540, T=1, H=65, W=180,
+    timestep=env.model.opt.timestep, legend=False,
+)
+for fig in figs:
+    env.add_fig(fig)
+
+# Weight matrix visualization
+W_Ia_heatmap = viz.HeatmapGeom(
+    center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
+    size=0.05,
+    min_weight=0,
+    max_weight=1,
+    W=spine.net.aMN.W_Ia
+)
+env.add_geom(W_Ia_heatmap)
+
+# Weight matrix visualization
+W_Ia_heatmap = viz.HeatmapGeom(
+    center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
+    size=0.05,
+    min_weight=0,
+    max_weight=1,
+    W=spine.net.aMN.W_Ia,
+    xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
+    ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
+)
+env.add_geom(W_Ia_heatmap)
+
+W0 = spine.net.aMN.W_Ia.clone().detach()
+diffW_Ia_heatmap = viz.HeatmapGeom(
+    center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
+    size=0.03,
+    W=spine.net.aMN.W_Ia,
+    W0=W0,
+    min_weight=0,
+    max_weight=1,
+    notext=True,
+    spacing=2
+)
+env.add_geom(diffW_Ia_heatmap)
+
+W0 = spine.net.aMN.W_Ia.clone().detach()
+diffW_Ia_heatmap = viz.HeatmapGeom(
+    center= env_kwargs['lookat'] + np.array([-0.6, -0.5, -5]),
+    size=0.03,
+    W=spine.net.aMN.W_Ia,
+    W0=W0,
+    min_weight=0,
+    max_weight=1,
+    notext=True,
+    spacing=2
+)
+env.add_geom(diffW_Ia_heatmap)
+
+# Muscle Strength Factor
+fig = viz.BarsFigure(
+    viewport=mujoco.MjrRect(380, 0, 150, 100),
+    nbars=1,
+    title=f'Muscle Strength',
+    source=env.muscle_strength_factor,
+    ylim=np.array([-1, 1]),
+    xlim=np.array([0, 1]),
+    gridsize=np.array([5, 2]),
+    ysymmetric=True
+)
+fig.figure.flg_selection = 1
+fig.figure.selection = env.muscle_strength_factor
+env.add_fig(fig)
 
 annotation = viz.Annotation(
     text=annotation,
-    viewport=mujoco.MjrRect(175, 90, 200, 200),
+    viewport=mujoco.MjrRect(340, 90, 200, 200),
     gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
 )
 env.add_annotation(annotation)
