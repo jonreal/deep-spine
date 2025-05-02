@@ -1,173 +1,43 @@
-import numpy as np
-import traceback
-from scipy import signal
-import torch
-import matplotlib.pyplot as plt
-import seaborn as sns
+import argparse
+import json
 import os
-import subprocess
 import time
 import pickle
-import sys
+import numpy as np
+import torch
+import traceback
+import matplotlib.pyplot as plt
 import mujoco
+import seaborn as sns
+from scipy import signal
 from pprint import pprint
-import json
 
-from deep_spine import Arm26Babble
-from deep_spine import HebbianLearner
-
+# Deep spine imports
+from deep_spine import Arm26Babble, HebbianLearner
 from deep_spine.spine.ia_reflex import IaReflexSpine
 from deep_spine.supraspine.babble import Babble
-
 from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
-
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
 
-frame_rate = 10
-log_top_dir = './logs/exp-3-24-2025'
-
-options = {
-    'num_eps': 50,
-    'eps_length': 180,
-    'learning_rate': 100,
-    'W0' : 0.2,
-    'lock_target': False,
-    'postive_only': False,
-    'min_weight': 0,
-    'max_weight': 1,
-    'seed': 1,
-    'damping': 1,
-    'viscosity': 0,
-    'muscle_strength_factor': 0.1,
-    'muscle_increase_factor': 1.1,
-    'hebbian_gain': 2,
-    'shunt_model': 'linear',
-    'p' : 1,
-    'k_s': 0.6,
-    'k_d': 1,
-    'Ia_velocity_gain': 10,
-    'babble_max_prob': 0.005
-}
-
-now = time.time()
-local_time = time.localtime(now)
-run_id = int(now)
-date_string = (
-    f'{time.strftime("%b-%-d-%Y", local_time)}\n'
-    f'{run_id}'
-)
-log_dir = (
-    f'./{log_top_dir}/{run_id}'
-    f'-ks={options["k_s"]}'
-    f'-kd={options["k_d"]}'
-    f'-IaV={options["Ia_velocity_gain"]}'
-    f'-lr={options["learning_rate"]}'
-    f'-Hg={options["hebbian_gain"]}'
-    f'-W0={options["W0"]}'
-    f'-mfac={options["muscle_strength_factor"]}'
-    f'-shunt={options["shunt_model"]}'
-)
-annotation =(
-    f'ks={options["k_s"]}\n'
-    f'kd={options["k_d"]}\n'
-    f'kVIa={options["Ia_velocity_gain"]}\n'
-    f'lr={options["learning_rate"]}\n'
-    f'Hg={options["hebbian_gain"]}\n'
-    f'W0={options["W0"]}\n'
-    f'f x m ={options["muscle_increase_factor"]}\n'
-    f'shunt={options["shunt_model"]}\n'
-)
-
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
-
-sim_animation = f'./{log_dir}/sim'
-sim_log = None
-heb_log = None
-
-if sim_log  or heb_log:
-    if not os.path.exists(f'./{log_dir}/data'):
-        os.makedirs(f'./{log_dir}/data')
-
-torch.manual_seed(options['seed'])
-if options['W0'] == 'identity':
-    W_Ia0 = torch.eye(6)
-elif options['W0'] == 'identity_noise':
-    W_Ia0 = torch.clip(
-        0.5*torch.eye(6) + torch.normal(mean=0.05, std=0.01, size=(6, 6)),
-        min_weight, max_weight
-    )
-else:
-    W_Ia0 = torch.normal(mean=options['W0'], std=0.01, size=(6, 6))
-
-env_kwargs = {
-    'frame_rate': frame_rate,
-    'save_frames_to_path': sim_animation,
-    'render_in_background': False,
-    'render_lossless': False,
-    'task': 'babble',
-    'episode_length': options['eps_length'],
-    'muscle_strength_factor': options['muscle_strength_factor'],
-    'window_width': 1200,
-    'window_height': 900,
-    'lookat': np.array([0.45, -0.2, -0.5]),
-    }
-
-spine_kwargs =  {
-    'decimation_factor':  1,
-    'mechanics_filter_cutoff':  0.0,
-    'II_length_gain': 1.25,
-    'II_bias': -0.2,
-    'Ia_II_gain': 0.2,
-    'Ia_saturation_constant': 1.25,
-    'Ia_velocity_gain': options['Ia_velocity_gain'],
-    'muscle_bias': -0.3,
-    'muscle_gain': 1 / 0.7,
-    'W_Ia':  W_Ia0,
-    'K': 0.3,
-    'shunt_model': options['shunt_model'],
-    'k_s': options['k_s'],
-    'k_d': options['k_d'],
-    'p': options['p']
-}
-
-supraspine_kwargs = {
-    'decimation_factor': 1,
-    'babble_max_prob': options['babble_max_prob'],
-    'babble_duration_range': np.array([0.05, 0.1]),
-    'babble_rise_time_range': np.array([0.5, 0.8]),
-    'seed': options['seed']
-}
-
-hebbian_kwargs = {
-    'gain': options['hebbian_gain'],
-    'learning_rate': options['learning_rate'],
-    'lock_target': options['lock_target'],
-    'postive_only': options['postive_only'],
-    'min_weight': options['min_weight'],
-    'max_weight': options['max_weight'],
-    'Kmean': 0.00004,
-    'Klearn': 0.001,
-    'hp_cut': 0.05/(200/2)
-}
-
-all_args = {
-    'options': options,
-    'env_kwargs': env_kwargs,
-    'spine_kwargs': spine_kwargs,
-    'supraspine_kwargs': supraspine_kwargs,
-    'hebbian_kwargs': hebbian_kwargs,
-}
-
-with open(log_dir + '/settings.pkl', 'wb') as f:
-    pickle.dump(all_args, f)
+def recursive_update(d, u, *, strict=False):
+    changed = False
+    for k, v in u.items():
+        if strict and k not in d:
+            raise KeyError(f"[config error] unknown key '{k}' in override")
+        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+            changed |= recursive_update(d[k], v, strict=strict)
+        else:
+            if k not in d or d[k] != v:
+                d[k] = v
+                changed = True
+    return changed
 
 def convert_to_serializable(obj):
     if isinstance(obj, np.ndarray):
         return obj.tolist()
     elif isinstance(obj, torch.Tensor):
-        return obj.tolist()  # Convert PyTorch tensors to lists
+        return obj.tolist()
     elif isinstance(obj, dict):
         return {k: convert_to_serializable(v) for k, v in obj.items()}
     elif isinstance(obj, list):
@@ -175,175 +45,314 @@ def convert_to_serializable(obj):
     else:
         return obj
 
-# Save as JSON without reordering
-all_args_serializable = convert_to_serializable(all_args)
-with open(log_dir + '/settings.txt', 'w') as f:
-    json.dump(all_args_serializable, f, indent=4)
+def format_value(v):
+    if isinstance(v, (int, float)):
+        return f'{v:.3g}'
+    elif isinstance(v, str):
+        return v[:6]
+    elif isinstance(v, list):
+        return "x".join(format_value(x) for x in v)
+    else:
+        return str(v)
 
-#with open(log_dir + '/settings.txt', 'w') as f:
-#    pprint(all_args, stream=f)
-
-spine = IaReflexSpine(**spine_kwargs)
-supraspine = Babble(**supraspine_kwargs)
-env = Arm26Babble(spine=spine, supraspine=supraspine, **env_kwargs)
-learner = HebbianLearner(W=spine.net.aMN.W_Ia, **hebbian_kwargs)
-
-
-figs = make_spine_viz(
-    data=env.data, spine=spine, supraspine=supraspine,
-    xs=900, ys=900, T=1, H=80, W=300,
-    timestep=env.model.opt.timestep
-)
-for fig in figs:
-    env.add_fig(fig)
-
-figs = make_hebbian_viz(
-    learner=learner,
-    xs=200, ys=540, T=1, H=65, W=180,
-    timestep=env.model.opt.timestep, legend=True, showlabel=False
-)
-for fig in figs:
-    env.add_fig(fig)
-
-figs = make_hebbian_viz(
-    learner=learner,
-    xs=20, ys=540, T=1, H=65, W=180,
-    timestep=env.model.opt.timestep, legend=False,
-)
-for fig in figs:
-    env.add_fig(fig)
-
-# Weight matrix visualization
-W_Ia_heatmap = viz.HeatmapGeom(
-    center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
-    size=0.05,
-    min_weight=0,
-    max_weight=1,
-    W=spine.net.aMN.W_Ia
-)
-env.add_geom(W_Ia_heatmap)
-
-# Weight matrix visualization
-W_Ia_heatmap = viz.HeatmapGeom(
-    center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
-    size=0.05,
-    min_weight=0,
-    max_weight=1,
-    W=spine.net.aMN.W_Ia,
-    xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
-    ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE']
-)
-env.add_geom(W_Ia_heatmap)
-
-W0 = spine.net.aMN.W_Ia.clone().detach()
-diffW_Ia_heatmap = viz.HeatmapGeom(
-    center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
-    size=0.03,
-    W=spine.net.aMN.W_Ia,
-    W0=W0,
-    min_weight=0,
-    max_weight=1,
-    notext=True,
-    spacing=2
-)
-env.add_geom(diffW_Ia_heatmap)
-
-W0 = spine.net.aMN.W_Ia.clone().detach()
-diffW_Ia_heatmap = viz.HeatmapGeom(
-    center= env_kwargs['lookat'] + np.array([-0.6, -0.5, -5]),
-    size=0.03,
-    W=spine.net.aMN.W_Ia,
-    W0=W0,
-    min_weight=0,
-    max_weight=1,
-    notext=True,
-    spacing=2
-)
-env.add_geom(diffW_Ia_heatmap)
-
-# Muscle Strength Factor
-fig = viz.BarsFigure(
-    viewport=mujoco.MjrRect(380, 0, 150, 100),
-    nbars=1,
-    title=f'Muscle Strength',
-    source=env.muscle_strength_factor,
-    ylim=np.array([-1, 1]),
-    xlim=np.array([0, 1]),
-    gridsize=np.array([5, 2]),
-    ysymmetric=True
-)
-fig.figure.flg_selection = 1
-fig.figure.selection = env.muscle_strength_factor
-env.add_fig(fig)
-
-annotation = viz.Annotation(
-    text=annotation,
-    viewport=mujoco.MjrRect(340, 90, 200, 200),
-    gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
-)
-env.add_annotation(annotation)
-
-annotation = viz.Annotation(
-    text=date_string,
-    viewport=mujoco.MjrRect(0, 0, 1200, 100),
-    gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
-)
-env.add_annotation(annotation)
-
-simulation_timestep = env.model.opt.timestep
-env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
-env.model.opt.viscosity = options['viscosity']
-env.model.dof_damping[:] = options['damping']
-
-env.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = True
-env.opt.flags[mujoco.mjtVisFlag.mjVIS_STATIC] = False
-env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTUATOR] = True
-env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTIVATION] = True
-
-env.reset()
-
-muscle_strength_factor = options['muscle_strength_factor']
-
-print('---\n')
-print(options)
-print('---\n\n')
-
-steps_per_eps = options['eps_length'] / simulation_timestep
-try:
-    for _ in range(options['num_eps']):
-        if sim_log is not None:
-            env.set_logfile(f'{sim_log}-{env.eps}')
-        if heb_log is not None:
-            learner.set_logfile(f'{heb_log}-{env.eps}')
-        tstart = time.time()
-        done = False
-        print('---\n')
-        print(
-            f'Eps: {int(env.eps)}, '
-            f'Muscle strength: {muscle_strength_factor:.2f}'
-        )
-        while not done:
-            _, _, done, _, _ = env.step(action=None)
-            learner.step(
-                pre_synaptic=spine.act_Ia,
-                post_synaptic=spine.act_aMN
+def build_custom_tag(custom_dict):
+    tag_parts = []
+    for k, v in sorted(custom_dict.items()):
+        if isinstance(v, dict):
+            tag_parts.extend(
+                f'{k[:3]}_{kk[:3]}={format_value(vv)}'
+                for kk, vv in sorted(v.items())
             )
+        else:
+            tag_parts.append(f'{k[:3]}={format_value(v)}')
+    return "_".join(tag_parts)
 
-        tend = time.time()
-        env.reset()
-        muscle_strength_factor = np.clip(
-            muscle_strength_factor * options['muscle_increase_factor'],
-            0, 1
+def build_annotation_text(config):
+    if config is None:
+        return " "
+
+    lines = []
+    for k, v in sorted(config.items()):
+        if isinstance(v, dict):
+            for kk, vv in sorted(v.items()):
+                label = f'{k[:3]}_{kk[:3]}'
+                lines.append(f'{label}={format_value(vv)}')
+        else:
+            lines.append(f'{k[:3]}={format_value(v)}')
+    return "\n".join(lines)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run deep spine simulation with default and custom configs."
+    )
+    parser.add_argument('--config', required=True,
+                        help="Path to default config JSON file.")
+    parser.add_argument('--custom', type=json.loads,
+                        help="Path to custom override JSON file (e.g. for options).")
+    args = parser.parse_args()
+
+    # Load the default configuration
+    with open(args.config, 'r') as f:
+        config = json.load(f)
+
+    custom_tag = ""
+    if args.custom:
+        changed = recursive_update(config, args.custom)
+        if not changed:
+            raise ValueError(
+                f"[config error] custom config '{args.custom}' had no effect")
+        custom_tag = build_custom_tag(args.custom)
+
+    # --- Unpack config ---
+    options = config.get("options", {})
+    log_top_dir = config.get("log_top_dir", "./logs/untitled")
+    now = time.time()
+    run_id = int(now)
+
+    log_dir = os.path.join(
+        log_top_dir,
+        f'{run_id}{custom_tag}'
+    )
+
+    # Unpack configuration
+    options = config.get("options", {})
+    env_kwargs = config.get("env_kwargs", {})
+    spine_kwargs = config.get("spine_kwargs", {})
+    supraspine_kwargs = config.get("supraspine_kwargs", {})
+    hebbian_kwargs = config.get("hebbian_kwargs", {})
+    log_top_dir = config.get("log_top_dir", "./logs/untitled")
+
+    now = time.time()
+    local_time = time.localtime(now)
+    run_id = int(now)
+    date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{run_id}'
+    os.makedirs(log_dir, exist_ok=True)
+    sim_animation = f'./{log_dir}/sim'
+
+    torch.manual_seed(options.get("seed", 1))
+    min_weight = options.get("min_weight", 0)
+    max_weight = options.get("max_weight", 1)
+
+
+    Wp0 = options.get("Wp0")
+    if isinstance(Wp0, str) and os.path.isfile(Wp0):
+        Wp0 = np.loadtxt(Wp0, delimiter=',')
+        last_row = Wp0[-1]
+        Wp0 = torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
+    else:
+        Wp0 = (
+            torch.normal(mean=options.get("Wp0", 0.2), std=0.01, size=(6, 6))
         )
-        env.set_muscle_strength_factor(muscle_strength_factor)
-        print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
-        print(f'sim-secs per sec: {options['eps_length'] / (tend - tstart):.1f}')
-        print('---\n\n')
 
-except Exception as e:
-    tb = traceback.format_exc()
-    print(f"Error during simulation: {str(e)}")
-    print(f"Traceback details:\n{tb}")
-finally:
-    env.close()
+    Wn0 = options.get("Wn0")
+    if isinstance(Wn0, str) and os.path.isfile(Wn0):
+        Wn0 = np.loadtxt(Wn0, delimiter=',')
+        last_row = Wn0[-1]
+        Wn0 = torch.tensor(last_row[-36:].reshape(6, 6))
+    else:
+        Wn0 = (
+            torch.normal(mean=options.get("Wn0", 0.2), std=0.01, size=(6, 6))
+        )
 
+    env_kwargs.update({
+        'save_frames_to_path': sim_animation,
+    })
+
+    spine_kwargs.update({'Wp_Ia': Wp0, 'Wn_Ia': Wn0})
+
+    # Save configuration for reproducibility
+    all_args = {
+        'options': options,
+        'env_kwargs': env_kwargs,
+        'spine_kwargs': spine_kwargs,
+        'supraspine_kwargs': supraspine_kwargs,
+        'hebbian_kwargs': hebbian_kwargs,
+    }
+    with open(os.path.join(log_dir, 'settings.pkl'), 'wb') as f:
+        pickle.dump(all_args, f)
+    with open(os.path.join(log_dir, 'settings.txt'), 'w') as f:
+        json.dump(convert_to_serializable(all_args), f, indent=4)
+
+    # Initialize simulation components
+    spine = IaReflexSpine(**spine_kwargs)
+    supraspine = Babble(**supraspine_kwargs)
+    env = Arm26Babble(spine=spine, supraspine=supraspine, **env_kwargs)
+
+    learners = [
+        HebbianLearner(
+            W=eval(kwargs["W"]),
+            pre=eval(kwargs["pre"]),
+            post=eval(kwargs["post"]),
+            **{k: v for k, v in kwargs.items() if k not in {"W", "pre", "post"}}
+        )
+        for kwargs in hebbian_kwargs
+    ]
+
+    # Set up visualizations
+    for fig in make_spine_viz(
+            data=env.data, spine=spine, supraspine=supraspine,
+            xs=900, ys=900, T=1, H=80, W=300,
+            timestep=env.model.opt.timestep):
+        env.add_fig(fig)
+    for fig in make_hebbian_viz(
+            learner=learners[1],
+            xs=200, ys=540, T=1, H=65, W=180,
+            timestep=env.model.opt.timestep, legend=True, showlabel=False):
+        env.add_fig(fig)
+    for fig in make_hebbian_viz(
+            learner=learners[0],
+            xs=20, ys=540, T=1, H=65, W=180,
+            timestep=env.model.opt.timestep, legend=False):
+        env.add_fig(fig)
+
+    # Weight matrix visualizations
+    W_Ia_heatmap = viz.HeatmapGeom(
+        center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
+        size=0.05,
+        min_weight=0,
+        max_weight=1,
+        W=spine.net.Wp_Ia,
+        title='excitatory',
+    )
+    env.add_geom(W_Ia_heatmap)
+    W0 = spine.net.Wp_Ia.clone().detach()
+    diffW_Ia_heatmap = viz.HeatmapGeom(
+        center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
+        size=0.03,
+        W=spine.net.Wp_Ia,
+        W0=W0,
+        min_weight=0,
+        max_weight=1,
+        notext=True,
+        spacing=2
+    )
+    env.add_geom(diffW_Ia_heatmap)
+
+    W_Ia_heatmap = viz.HeatmapGeom(
+        center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
+        size=0.05,
+        min_weight=0,
+        max_weight=1,
+        W=spine.net.Wn_Ia,
+        xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
+        ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
+        title='inhibitory'
+    )
+    env.add_geom(W_Ia_heatmap)
+    W0 = spine.net.Wn_Ia.clone().detach()
+    diffW_Ia_heatmap = viz.HeatmapGeom(
+        center= env_kwargs['lookat'] + np.array([-0.6, -0.5, -5]),
+        size=0.03,
+        W=spine.net.Wn_Ia,
+        W0=W0,
+        min_weight=0,
+        max_weight=1,
+        notext=True,
+        spacing=2
+    )
+    env.add_geom(diffW_Ia_heatmap)
+
+    fig = viz.BarsFigure(
+        viewport=mujoco.MjrRect(380, 0, 150, 100),
+        nbars=1,
+        title='Muscle Strength',
+        source=env.muscle_strength,
+        ylim=np.array([-1, 1]),
+        xlim=np.array([0, 1]),
+        gridsize=np.array([5, 2]),
+        ysymmetric=True
+    )
+    fig.figure.flg_selection = 1
+    fig.figure.selection = env.muscle_strength
+    env.add_fig(fig)
+
+    annotation_text = build_annotation_text(args.custom)
+    annotation = viz.Annotation(
+        text=annotation_text,
+        viewport=mujoco.MjrRect(340, 90, 200, 200),
+        gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
+    )
+    env.add_annotation(annotation)
+    annotation = viz.Annotation(
+        text=date_string,
+        viewport=mujoco.MjrRect(0, 0, 1200, 100),
+        gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
+    )
+    env.add_annotation(annotation)
+
+    # Simulation settings
+    env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
+    env.model.opt.viscosity = options.get("viscosity", 0)
+    env.model.dof_damping[:] = options.get("damping", 1)
+    env.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = True
+    env.opt.flags[mujoco.mjtVisFlag.mjVIS_STATIC] = False
+    env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTUATOR] = True
+    env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTIVATION] = True
+
+    muscle_strength = env.muscle_strength[0]
+    muscle_increase_factor = options.get("muscle_increase_factor", 1.1)
+    max_muscle_strength = options.get("max_muscle_strength", 1.0)
+
+    env.reset()
+    steps_per_eps = env.episode_length / env.model.opt.timestep
+    last_write_time = 0.0
+
+    print('---\n', options, '\n---\n\n')
+    try:
+        for i in range(options.get("num_eps", 50)):
+            tstart = time.time()
+            done = False
+            print('---\n')
+            print(
+                f'Eps: {int(env.eps)},'
+                f'Muscle strength: {muscle_strength:.2f}'
+            )
+            last_write_time = 0
+            while not done:
+                _, _, done, _, _ = env.step(action=None)
+                for learner in learners:
+                    learner.step()
+
+                current_time = env.data.time
+
+                if current_time - last_write_time >= 1.0:
+
+                    vals = ",".join(
+                        map(str, spine.net.Wn_Ia.flatten().tolist())
+                    )
+                    with open(f"./{log_dir}/W_n.txt", "a") as f:
+                        f.write(
+                            f"{i},"
+                            f"{current_time:.2f},"
+                            f"{vals}\n"
+                        )
+                    vals = ",".join(
+                        map(str, spine.net.Wp_Ia.flatten().tolist())
+                    )
+                    with open(f"./{log_dir}/W_p.txt", "a") as f:
+                        f.write(
+                            f"{i},"
+                            f"{current_time:.2f},"
+                            f"{vals}\n"
+                        )
+                    last_write_time = current_time
+
+            tend = time.time()
+            env.reset()
+            muscle_strength = np.clip(
+                muscle_strength * muscle_increase_factor,
+                0, max_muscle_strength
+            )
+            env.set_muscle_strength(muscle_strength)
+            print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
+            print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
+            print('---\n\n')
+    except Exception as e:
+        tb = traceback.format_exc()
+        print(f"Error during simulation: {str(e)}")
+        print(f"Traceback details:\n{tb}")
+    finally:
+        env.close()
+
+if __name__ == '__main__':
+    main()

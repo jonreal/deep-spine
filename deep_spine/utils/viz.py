@@ -1,5 +1,6 @@
 import numpy as np
 import mujoco
+import colorsys
 
 class Annotation:
     def __init__(
@@ -23,11 +24,13 @@ class HeatmapGeom:
         W: np.ndarray,
         xlabel = None,
         ylabel = None,
+        title = None,
         notext = False,
         W0 = None,
         min_weight = -1,
         max_weight = 1,
-        spacing = 2.15
+        spacing = 2.15,
+        text_color = np.array([0, 0, 0, 0])
     ):
         self.size = size
         self.center = center
@@ -37,36 +40,90 @@ class HeatmapGeom:
         self.max_weight = max_weight
         self.xlabel = xlabel
         self.ylabel = ylabel
+        self.title = title
         self.notext = notext
         self.W0 = W0
         self.spacing = spacing
+        self.text_color = text_color
 
     def draw(self, scene):
+
+    # Method 1
+    #    for i in range(self.n):
+    #        for j in range(self.n):
+    #            if self.W0 is not None:
+    #                delta_W = self.W[i][j] - self.W0[i][j]
+    #                if delta_W < 0:
+    #                    scale = (
+    #                        0.5
+    #                        * (delta_W - (self.min_weight - self.W0[i][j]))
+    #                        / (self.W0[i][j] - self.min_weight)
+    #                    )
+    #                else:
+    #                    scale = (
+    #                        0.5
+    #                        + 0.5
+    #                        * (delta_W / (self.max_weight - self.W0[i][j]))
+    #                    )
+    #            else:
+    #                scale = (
+    #                    (self.W[i][j] - self.min_weight)
+    #                    / (self.max_weight - self.min_weight)
+    #                )
+
+    #            R = 1 if scale > 0.5 else 2 * scale
+    #            G = 2 * scale if scale < 0.5 else 2 * (1 - scale)
+    #            B = 1 if scale < 0.5 else 2 * (1 - scale)
+
+
+    # Method 2
         for i in range(self.n):
             for j in range(self.n):
                 if self.W0 is not None:
-                    delta_W = self.W[i][j] - self.W0[i][j]
-                    if delta_W < 0:
+                    w = self.W[i][j] - self.W0[i][j]  # Compute raw w
+                    if w < 0:
+    #                    scale = w / -self.W0[i][j]
                         scale = (
                             0.5
-                            * (delta_W - (self.min_weight - self.W0[i][j]))
+                            * (w - (self.min_weight - self.W0[i][j]))
                             / (self.W0[i][j] - self.min_weight)
                         )
+
+                        R = 1 * (1 - scale)  # From 0 to 1
+                        G = 1 * (1 - scale)  # From 0 to 1
+                        B = 1  # Always blue
                     else:
                         scale = (
                             0.5
                             + 0.5
-                            * (delta_W / (self.max_weight - self.W0[i][j]))
+                            * (w / (self.max_weight - self.W0[i][j]))
                         )
+                        #scale = w / (1 - self.W0[i][j])
+                        R = 1  # Always red
+                        G = 1 * (1 - scale)  # From 1 to 0
+                        B = 1 * (1 - scale)  # From 1 to 0
+                    w_rgba = np.array([R, G, B, 0.1])
                 else:
-                    scale = (
-                        (self.W[i][j] - self.min_weight)
-                        / (self.max_weight - self.min_weight)
-                    )
+                    w = self.W[i][j]
+                    if w <= 0.5:
+                        # Map [0, 0.5] to [blue, white]
+                        scale = w / 0.5
+                        R = 1 * scale  # From 0 to 1
+                        G = 1 * scale  # From 0 to 1
+                        B = 1  # Always blue
+                    else:
+                        # Map [0.5, 1] to [white, red]
+                        scale = (w - 0.5) / 0.5
+                        R = 1  # Always red
+                        G = 1 * (1 - scale)  # From 1 to 0
+                        B = 1 * (1 - scale)  # From 1 to 0
 
-                R = 1 if scale > 0.5 else 2 * scale
-                G = 2 * scale if scale < 0.5 else 2 * (1 - scale)
-                B = 1 if scale < 0.5 else 2 * (1 - scale)
+                #if scale < 0.5:
+                #    R = 0
+                #    G = B = 2 * scale
+                #else:
+                #    B = 0
+                #    G = R = 2 * (1 - scale)
 
                 w_rgba = np.array([R, G, B, 0.1])
 
@@ -111,7 +168,7 @@ class HeatmapGeom:
                         size=self.size*np.array([1, 1, 0.01]),
                         pos=tx_center,
                         mat=np.eye(3).flatten(),
-                        rgba=np.array([0, 0, 0, 0])
+                        rgba=self.text_color
                     )
                     scene.geoms[scene.ngeom].label = "  |"
                     scene.ngeom += 1
@@ -122,7 +179,7 @@ class HeatmapGeom:
                         size=self.size*np.array([1, 1, 0.01]),
                         pos=tx_center,
                         mat=np.eye(3).flatten(),
-                        rgba=np.array([0, 0, 0, 0])
+                        rgba=self.text_color
                     )
                     scene.geoms[scene.ngeom].label = f"{self.xlabel[j]}"
                     scene.ngeom += 1
@@ -134,7 +191,7 @@ class HeatmapGeom:
                         size=self.size*np.array([1, 1, 0.01]),
                         pos=tx_center,
                         mat=np.eye(3).flatten(),
-                        rgba=np.array([0, 0, 0, 0])
+                        rgba=self.text_color
                     )
                     scene.geoms[scene.ngeom].label = "_"
                     scene.ngeom += 1
@@ -145,10 +202,22 @@ class HeatmapGeom:
                         size=self.size*np.array([1, 1, 0.01]),
                         pos=tx_center,
                         mat=np.eye(3).flatten(),
-                        rgba=np.array([0, 0, 0, 0])
+                        rgba=self.text_color
                     )
                     scene.geoms[scene.ngeom].label = f"{self.ylabel[i]}"
                     scene.ngeom += 1
+        if self.title is not None:
+            tx_center = self.center + np.array([0.65, 0.19, 0])
+            mujoco.mjv_initGeom(
+                scene.geoms[scene.ngeom],
+                type=mujoco.mjtGeom.mjGEOM_LABEL,
+                size=self.size*np.array([1, 1, 0.01]),
+                pos=tx_center,
+                mat=np.eye(3).flatten(),
+                rgba=self.text_color
+            )
+            scene.geoms[scene.ngeom].label = self.title
+            scene.ngeom += 1
 
 class TracesFigure:
     def __init__(
@@ -162,9 +231,11 @@ class TracesFigure:
         ylim: np.ndarray = None,
         yformat: str = '%.2f',
         ysymmetric: bool = False,
-        gridsize: np.ndarray = None
+        gridsize: np.ndarray = None,
+        text_color = np.array([1, 1, 1, 1])
     ):
         self.ylabel = ylabel
+        self.text_color = text_color
         self.ntraces = ntraces
         self.buffer = np.zeros((ntraces, window))
         self.window = window
@@ -173,6 +244,7 @@ class TracesFigure:
         self.figure.figurergba = np.array([0, 0, 0, 0])
         self.figure.panergba = np.array([0, 0, 0, 0])
         self.figure.flg_ticklabel[0] = 0
+        self.figure.flg_extend = 1
         self.figure.linewidth = 1
         self.figure.minwidth = '0000000'
         self.figure.yformat = yformat
@@ -181,7 +253,6 @@ class TracesFigure:
             self.figure.gridsize[1] = 3
         if gridsize is not None:
             self.figure.gridsize = gridsize
-
 
         self.source = source
         for i in range(ntraces):
@@ -259,7 +330,7 @@ class BarsFigure:
 
 def make_spine_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
     traces = [
-        ('qpos', data.qpos, 2, [-0.25, 0.25], True),
+        ('pos', data.qpos, 2, [-0.25, 0.25], True),
         ('qvel', data.qvel, 2, [-0.5, 0.5], False),
         ('len', spine.length, spine.n, [0, 1], False),
         ('vel', spine.velocity, spine.n, [-0.1, 0.1], True),
@@ -267,7 +338,7 @@ def make_spine_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
         ('drive', supraspine.drive, supraspine.n, [0, 1], False),
         ('act_II', spine.act_II, spine.n, [0, 1], False),
         ('act_Ia', spine.act_Ia, spine.n, [0, 1], False),
-        ('MN', spine.act_aMN, spine.n, [0, 1], False),
+        ('MN', spine.act_MN, spine.n, [0, 1], False),
         ('act_MN', spine.act_muscle, spine.n, [0, 1], False),
         ('act', spine.act, spine.n, [0, 1], False),
     ]
@@ -307,7 +378,7 @@ def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
         ('pre', learner.pre_synaptic, learner.pre_synaptic.shape[0],
             [0, 1], False),
         ('post*', learner.post_dev, learner.post_dev.shape[0],
-            [-0.25, 1.75], False),
+            [-0.5, 0.25], False),
         ('L_1j', learner.learning_signal[0][:],
             learner.learning_signal[0][:].shape[0],
             [-0.001, 0.001], False),
@@ -350,7 +421,7 @@ def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
     if legend:
         fig = TracesFigure(
             viewport=mujoco.MjrRect(
-                xs+W, ys -int(2.1*H), int(W/3.5), int(2.1*H)
+                xs+W, ys -int(2.3*H), int(W/3.5), int(2.3*H)
             ),
             ntraces=learner.learning_signal[5][:].numel(),
             window=N,
@@ -384,7 +455,7 @@ def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
         figs[-2].figure.flg_ticklabel[0] = 0
         figs[-2].figure.flg_ticklabel[1] = 0
         figs[-2].figure.flg_extend = 0
-    figs[1].figure.flg_extend = 0
+    #figs[1].figure.flg_extend = 0
 
     return figs
 

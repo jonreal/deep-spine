@@ -6,11 +6,12 @@ class IirFilt(object):
             self.identity = True
         else:
             self.identity=False
-            self.b = b
-            self.a = a
+            self.b = np.asarray(b)
+            self.a = np.asarray(a)
             self.n = len(b)
             self.x = np.zeros(self.n)
             self.y = np.zeros(self.n)
+
 
     def filter(self,sample):
         if not self.identity:

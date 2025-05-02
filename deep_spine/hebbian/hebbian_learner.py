@@ -3,12 +3,14 @@ from scipy import signal
 import torch
 import mujoco
 import deep_spine.spine.filters.iir as iir
-import deep_spine.environments.viz as viz
+import deep_spine.utils.viz as viz
 
 class HebbianLearner:
     def __init__(
         self,
         W,
+        pre,
+        post,
         path_to_logfile = './hebbian-data',
         gain = 1,
         learning_rate=0.01,
@@ -18,9 +20,12 @@ class HebbianLearner:
         max_weight = 1,
         Kmean = 1,
         Klearn = 1,
-        hp_cut = 1
+        synaptic_filter = {'order': 1, 'cutoff': 0.1, 'type': 'low'},
     ):
         self.W = W
+        self.pre_synaptic = pre
+        self.post_synaptic = post
+
         self.n = W.shape[0]
         self.min_weight = min_weight
         self.max_weight = max_weight
@@ -41,13 +46,14 @@ class HebbianLearner:
         self.mean_filter = (
             [iir.IirFilt([0, Kmean], [1, Kmean-1]) for _ in range(self.n)]
         )
-        b, a = signal.butter(1, hp_cut, 'high')
-        self.hp_filter = (
+        b, a = signal.butter(
+            synaptic_filter['order'],
+            synaptic_filter['cutoff'],
+            synaptic_filter['type']
+        )
+        self.synaptic_filter = (
             [iir.IirFilt(b, a) for _ in range(self.n)]
         )
-
-        self.pre_synaptic = torch.zeros(self.n)
-        self.post_synaptic = torch.zeros(self.n)
         self.high_pass_post_synaptic = torch.zeros(self.n)
         self.mean_post_synaptic = torch.zeros(self.n)
         self.post_dev = torch.zeros(self.n)
@@ -62,73 +68,114 @@ class HebbianLearner:
         else:
             self.logfile = None
 
-    def step(self, pre_synaptic, post_synaptic):
-        self.pre_synaptic[:] = torch.tensor(pre_synaptic)
-        self.post_synaptic[:] = torch.tensor(post_synaptic)
+    @torch.no_grad()
+    def step(self):
 
-        # find weights larger than the 'lock_target'
-        if self.lock_target:
-            lock_bool = self.W > self.lock_target
 
-        # Hebbian learning
+        # --- FILTER STAGE (scalar loops) ---
         for i in range(self.n):
-            self.high_pass_post_synaptic[i] = torch.tensor(
-                self.hp_filter[i].filter(self.post_synaptic[i])
-            )
-            self.mean_post_synaptic[i] = torch.tensor(
-                self.mean_filter[i].filter(self.post_synaptic[i])
-            )
-            self.post_dev[i] = (
-                self.gain*self.high_pass_post_synaptic[i]
-                - self.mean_post_synaptic[i]
-            )
+            post = self.post_synaptic[i]
+            self.high_pass_post_synaptic[i] = self.synaptic_filter[i].filter(post)
+            self.mean_post_synaptic[i] = self.mean_filter[i].filter(post)
+
+        high_pass = self.high_pass_post_synaptic         # (n,)
+        mean_post = self.mean_post_synaptic              # (n,)
+        post_dev = self.gain * high_pass - mean_post     # (n,)
+        self.post_dev.copy_(post_dev)
+
+        # --- LEARNING SIGNAL STAGE (still needs loop due to per-filter state) ---
+        for i in range(self.n):
             for j in range(self.n):
                 self.learning_signal[i, j] = (
                     self.learning_filter[i][j].filter(
-                        self.pre_synaptic[j] * self.post_dev[i] * self.W[i, j]
+                        self.pre_synaptic[j] * post_dev[i] * self.W[i, j]
                     )
                 )
-                if self.learning_signal[i, j] >= 0:
-                    self.compensation[i, j] = 1 - self.W[i, j]
-                else:
-                    self.compensation[i,j] = self.W[i, j]
 
-                self.rate[i, j] = (
-                    self.mean_post_synaptic[i]**4 * self.learning_rate
-                )
-                self.dW[i, j] = (
-                    self.compensation[i, j]
-                    * self.learning_signal[i, j]
-                    * self.rate[i, j]
-                )
-                # if dW is negative but the current weight is larger than the
-                # lock_target, set dW to 0
-                if self.lock_target and lock_bool[i, j]:
-                    self.dW[i, j] = 0
+        # --- VECTORIZED WEIGHT UPDATE ---
+        signal = self.learning_signal                    # (n, n)
+        comp = torch.where(signal >= 0, 1 - self.W, self.W)
+        rate = (mean_post ** 4) * self.learning_rate     # (n,)
+        rate = rate.view(-1, 1)                          # (n, 1) for broadcast
 
-                if self.postive_only and self.dW[i, j] < 0:
-                    self.dW[i, j] = 0
+        dW = comp * signal * rate                        # (n, n)
+
+        if self.lock_target:
+            lock_mask = self.W >= self.lock_target
+            dW = dW.masked_fill(lock_mask, 0)
+
+        if self.postive_only:
+            dW = dW.clamp(min=0)
+
+        self.dW.copy_(dW)
 
         self.W.add_(self.dW)
         self.W.clamp_(min=self.min_weight, max=self.max_weight)
 
-        data = np.concatenate([
-            self.pre_synaptic,
-            self.post_synaptic,
-            self.high_pass_post_synaptic,
-            self.mean_post_synaptic,
-            self.learning_signal.flatten(),
-            self.compensation.flatten(),
-            self.rate.flatten(),
-            self.dW.flatten(),
-            self.W.flatten()
-        ])
-        self.data_cache = data
-        #data_str = ','.join(map('{:.6f}'.format, data))
-        #print(data_str, file=self.logfile)
-        #self.logfile.write(data.tobytes())
-
-        return self.dW
+#        pre = torch.tensor(self.pre_synaptic, dtype=torch.float32)
+#        post = torch.tensor(self.post_synaptic, dtype=torch.float32)
+#
+#        # find weights larger than the 'lock_target'
+#        if self.lock_target:
+#            lock_bool = self.W > self.lock_target
+#
+#        # Hebbian learning
+#        for i in range(self.n):
+#            self.high_pass_post_synaptic[i] = torch.tensor(
+#                self.synaptic_filter[i].filter(self.post_synaptic[i])
+#            )
+#            self.mean_post_synaptic[i] = torch.tensor(
+#                self.mean_filter[i].filter(self.post_synaptic[i])
+#            )
+#            self.post_dev[i] = (
+#                self.gain*self.high_pass_post_synaptic[i]
+#                - self.mean_post_synaptic[i]
+#            )
+#            for j in range(self.n):
+#                self.learning_signal[i, j] = (
+#                    self.learning_filter[i][j].filter(
+#                        self.pre_synaptic[j] * self.post_dev[i] * self.W[i, j]
+#                    )
+#                )
+#                if self.learning_signal[i, j] >= 0:
+#                    self.compensation[i, j] = 1 - self.W[i, j]
+#                else:
+#                    self.compensation[i,j] = self.W[i, j]
+#
+#                self.rate[i, j] = (
+#                    self.mean_post_synaptic[i]**4 * self.learning_rate
+#                )
+#                self.dW[i, j] = (
+#                    self.compensation[i, j]
+#                    * self.learning_signal[i, j]
+#                    * self.rate[i, j]
+#                )
+#                # if dW is negative but the current weight is larger than the
+#                # lock_target, set dW to 0
+#                if self.lock_target and lock_bool[i, j]:
+#                    self.dW[i, j] = 0
+#
+#                if self.postive_only and self.dW[i, j] < 0:
+#                    self.dW[i, j] = 0
+#
+#        self.W.add_(self.dW)
+#        self.W.clamp_(min=self.min_weight, max=self.max_weight)
+#
+#        data = np.concatenate([
+#            self.pre_synaptic,
+#            self.post_synaptic,
+#            self.high_pass_post_synaptic,
+#            self.mean_post_synaptic,
+#            self.learning_signal.flatten(),
+#            self.compensation.flatten(),
+#            self.rate.flatten(),
+#            self.dW.flatten(),
+#            self.W.flatten()
+#        ])
+#        self.data_cache = data
+#        #data_str = ','.join(map('{:.6f}'.format, data))
+#        #print(data_str, file=self.logfile)
+#        #self.logfile.write(data.tobytes())
 
 
 class HebbianMonitorFigure:

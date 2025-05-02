@@ -93,7 +93,7 @@ class BaseSpine:
 
     @abstractmethod
     def _initialize(self) -> None:
-        raise NotImplementedError("missing 'initialize_layers' method")
+        raise NotImplementedError("missing '_initialize' method")
 
     @abstractmethod
     def forward(self, model, data) -> None:

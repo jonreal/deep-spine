@@ -16,7 +16,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         task: Optional[str] = '',
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
-        muscle_strength_factor: float = 1,
+        muscle_strength: float = 1,
         episode_length: int = 100,
         seed: Optional[int] = 12345,
         xml_path: str = 'arm26.xml',
@@ -72,17 +72,17 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.ic_rng = np.random.default_rng(self.seed)
 
         self.max_muscle_strengths = self.model.actuator_gainprm[:,3].copy()
-        self.muscle_strength_factor = np.array([muscle_strength_factor])
-        self.set_muscle_strength_factor(self.muscle_strength_factor)
+        self.muscle_strength = np.array([muscle_strength])
+        self.set_muscle_strength(self.muscle_strength)
 
         # Cache for the tb log file
         self.log_eps = 0
         self.log_eps_reward = 0
 
 
-    def set_muscle_strength_factor(self, factor):
-        self.muscle_strength_factor[:] = factor
-        self.model.actuator_gainprm[:,3] = factor * self.max_muscle_strengths
+    def set_muscle_strength(self, strength):
+        self.muscle_strength[:] = strength
+        self.model.actuator_gainprm[:,3] = strength * self.max_muscle_strengths
 
     def initialize_spine(self, spine):
         spine.initialize(self.model, self.data)

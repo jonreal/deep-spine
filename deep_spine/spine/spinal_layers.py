@@ -36,14 +36,12 @@ class Ia(nn.Module):
         II_gain=0,
         vel_gain=0,
         saturation_constant=0,
-        K=0
     ):
         super().__init__()
         self.n = num_motor_units
         self.II_gain = II_gain
         self.vel_gain = vel_gain
         self.saturation_constant = saturation_constant
-        self.K = K
 
     def forward(self, velocity, act_II, act_muscle):
         activity_vector = (
@@ -117,15 +115,56 @@ class aMN(nn.Module):
 
     def linear_shunt(self, open_channels):
         return self.k_s + self.k_d * open_channels
-
     def log_shunt(self, open_channels):
         return self.k_s + self.k_d * torch.log(1 + open_channels)
-
-    def power_shunt(self, open_channels):
-        return self.k_s + self.k_d * open_channels**self.p
-
     def exp_shunt(self, open_channels):
         return self.k_s + self.k_d * np.exp(open_channels)
+
+class MN(nn.Module):
+    def __init__(
+        self,
+        num_motor_units,
+        kalman_gain=0,
+        static_leak=0.1,
+        dynamic_leak=1,
+        shunt_model='linear'
+    ):
+        super().__init__()
+        self.n = num_motor_units
+        self.shunt = self.set_shunt_model(
+            static_leak, dynamic_leak, shunt_model
+        )
+        self.synaptic_dynamics = (
+            [iir.IirFilt(
+                [0, kalman_gain], [1, kalman_gain-1]) for _ in range(self.n)
+            ]
+        )
+
+    def set_shunt_model(self, static_leak, dynamic_leak, shunt_model='linear'):
+        if shunt_model == 'linear':
+            return (
+                lambda open_channels:
+                static_leak + dynamic_leak * open_channels
+            )
+        elif shunt_model == 'log':
+            return (
+                lambda open_channels:
+                static_leak + dynamic_leak * torch.log1p(open_channels)
+            )
+        else:
+            raise ValueError(f"Unknown shunt model: {shunt_model}")
+
+    @torch.no_grad()
+    def forward(self, synaptic_activation):
+        open_channels = torch.abs(synaptic_activation)
+        a = torch.tensor([
+            self.synaptic_dynamics[i].filter(
+                synaptic_activation[i] / self.shunt(open_channels[i])
+            ) for i in range(self.n)
+        ])
+        return torch.clip(a, 0, 1)
+
+
 
 class Muscle(nn.Module):
     def __init__(

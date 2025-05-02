@@ -175,7 +175,20 @@ class BaseEnvironment(object):
                     mujoco.mjr_figure(fig.viewport, fig.figure, self.context)
                     label_viewport = copy.deepcopy(fig.viewport)
                     label_viewport.left += -20
+
                     if fig.ylabel:
+                        x_pixel = label_viewport.left
+                        y_pixel = (
+                            label_viewport.bottom
+                        )
+                        #mujoco.mjr_text(
+                        #    mujoco.mjtFont.mjFONT_NORMAL,
+                        #    fig.ylabel,
+                        #    self.context,
+                        #    0,
+                        #    0,
+                        #    1, 1, 1
+                        #)
                         mujoco.mjr_overlay(
                             mujoco.mjtFont.mjFONT_NORMAL,
                             mujoco.mjtGridPos.mjGRID_LEFT,
