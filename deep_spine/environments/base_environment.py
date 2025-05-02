@@ -19,8 +19,9 @@ class BaseEnvironment(object):
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
-        render_in_background: bool = False,
         render_lossless: bool = False,
+        video_scale: float = 0.5,
+        video_crf: str = '23',
         window_width: int = 1200,
         window_height: int = 900,
         azimuth: int = 180,
@@ -31,6 +32,8 @@ class BaseEnvironment(object):
         local_dir = os.path.dirname(os.path.abspath(__file__))
         self.xml_path = os.path.join(local_dir, xml_path)
         self.frame_rate = frame_rate
+        self.video_scale = video_scale
+        self.video_crf = video_crf
         self._initialize_mujoco()
 
         self.figs = None
@@ -43,11 +46,6 @@ class BaseEnvironment(object):
                 window_width, window_height, azimuth,
                 elevation, distance, lookat
             )
-            if render_in_background:
-                mujoco.mjr_setBuffer(
-                    mujoco.mjtFramebuffer.mjFB_OFFSCREEN, self.context
-                )
-
         if save_frames_to_path and self.frame_rate:
             self.save_frames_to_path = save_frames_to_path
             self._initialize_video_writer()
@@ -80,38 +78,55 @@ class BaseEnvironment(object):
             self.stream = self.container.add_stream('rawvideo', rate=self.vfps)
             self.stream.pix_fmt = "rgb24"
         else:
+
+            print(self.video_crf);
             self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
             self.stream = self.container.add_stream('h264', rate=self.vfps)
             self.stream.pix_fmt = 'yuv420p'
             self.stream.options = {
-                'crf': '18',   # High quality
+                'crf': str(self.video_crf),
+                'preset': 'slow'
             }
             #self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
             #self.stream = self.container.add_stream('mpeg4', rate=self.vfps)
             #self.stream.bit_rate = 40000000
-        self.stream.width = width
-        self.stream.height = height
+        # Calculate target dimensions based on scale factor
+        target_width = int(width * self.video_scale)
+        target_height = int(height * self.video_scale)
+
+        # Set the stream dimensions to the target size
+        self.stream.width = target_width
+        self.stream.height = target_height
+
         # Set up FFmpeg filter graph for video processing
         self.filter_graph = av.filter.Graph()
 
         # Convert width and height to strings
         width_str = str(width)
         height_str = str(height)
+        target_width_str = str(target_width)
+        target_height_str = str(target_height)
 
         self.buffer_source = self.filter_graph.add(
             "buffer",
             name="in",
-            width=width_str,  # Convert to string
-            height=height_str,  # Convert to string
+            width=width_str,
+            height=height_str,
             pix_fmt="rgb24",
             time_base=f"{1/self.vfps}"
         )
+
+        # Add filters: vflip and scale
         vflip_filter = self.filter_graph.add("vflip", name="vflip")
+        scale_filter = self.filter_graph.add("scale", name="scale",
+                                            w=target_width_str,
+                                            h=target_height_str)
         self.buffer_sink = self.filter_graph.add("buffersink", name="out")
 
-        # Link the filters
+        # Link the filters in sequence
         self.buffer_source.link_to(vflip_filter)
-        vflip_filter.link_to(self.buffer_sink)
+        vflip_filter.link_to(scale_filter)
+        scale_filter.link_to(self.buffer_sink)
 
     def _initialize_mujoco(self):
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)

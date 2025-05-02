@@ -22,8 +22,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
-        render_in_background: bool = False,
         render_lossless: bool = False,
+        video_scale: float = 0.5,
+        video_crf: str = '23',
         window_width: int = 1200,
         window_height: int = 900,
         azimuth: int = 180,
@@ -38,8 +39,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             xml_path=xml_path,
             frame_rate=frame_rate,
             save_frames_to_path=save_frames_to_path,
-            render_in_background=render_in_background,
             render_lossless=render_lossless,
+            video_scale=video_scale,
+            video_crf=video_crf,
             window_width=window_width,
             window_height=window_height,
             azimuth=azimuth,
@@ -110,49 +112,6 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.supraspine.update_seed(self.seed)
         self.simulation_steps = 0
 
-#    def _gen_babble(self):
-#        if self.task == 'babble':
-#            for i in range(self.spinal_layer.n):
-#                if (self.data.time
-#                    >= self.babble_duration[i] + self.babble_t0[i]
-#                ) or (
-#                    self.babble_prob[i] == 0
-#                ) or (
-#                    self.data.time == 0
-#                ):
-#                    self.babble_prob[i] = (
-#                        self.ic_rng.uniform(0, 1) <= self.babble_max_prob
-#                    )
-#                    if self.babble_prob[i]:
-#                        self.babble_t0[i] = self.data.time
-#                        self.babble_amp[i] = (
-#                            self.ic_rng.uniform(0, 1)
-#                        )
-#                        self.babble_duration[i] = self.ic_rng.uniform(
-#                            self.babble_duration_range[0],
-#                            self.babble_duration_range[1]
-#                        )
-#                        self.babble_rise_time[i] = self.ic_rng.uniform(
-#                            self.babble_rise_time_range[0],
-#                            self.babble_rise_time_range[1]
-#                        )
-#                        self.babble_filter[i] = iir.IirFilt(
-#                                [0, self.babble_rise_time[i]],
-#                                [1, self.babble_rise_time[i] - 1]
-#                        )
-#        else:
-#            raise ValueError(f"Invalid task: {self.task}")
-#
-#    def _update_babble(self):
-#        self.babble_signal[:] = np.array([
-#            self.babble_prob[i]
-#            * self.babble_amp[i]
-#            * self.babble_filter[i].filter(
-#                self.data.time <= self.babble_duration[i] + self.babble_t0[i]
-#            ) for i in range(self.spinal_layer.n)
-#        ])
-
-
     def _update_status(self):
         if self.simulation_steps >= self.simulation_steps_per_episode:
             self.done = True
@@ -172,8 +131,6 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             self._render()
             self._update_status()
             self._write_data_to_logfile()
-            #self._update_babble()
-            #self._gen_babble()
 
         self.eps_reward += (self.reward / self.simulation_sampling_rate)
         truncated = False
