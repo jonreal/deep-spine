@@ -48,84 +48,65 @@ class HeatmapGeom:
 
     def draw(self, scene):
 
-    # Method 1
-    #    for i in range(self.n):
-    #        for j in range(self.n):
-    #            if self.W0 is not None:
-    #                delta_W = self.W[i][j] - self.W0[i][j]
-    #                if delta_W < 0:
-    #                    scale = (
-    #                        0.5
-    #                        * (delta_W - (self.min_weight - self.W0[i][j]))
-    #                        / (self.W0[i][j] - self.min_weight)
-    #                    )
-    #                else:
-    #                    scale = (
-    #                        0.5
-    #                        + 0.5
-    #                        * (delta_W / (self.max_weight - self.W0[i][j]))
-    #                    )
-    #            else:
-    #                scale = (
-    #                    (self.W[i][j] - self.min_weight)
-    #                    / (self.max_weight - self.min_weight)
-    #                )
-
-    #            R = 1 if scale > 0.5 else 2 * scale
-    #            G = 2 * scale if scale < 0.5 else 2 * (1 - scale)
-    #            B = 1 if scale < 0.5 else 2 * (1 - scale)
-
-
-    # Method 2
         for i in range(self.n):
             for j in range(self.n):
                 if self.W0 is not None:
-                    w = self.W[i][j] - self.W0[i][j]  # Compute raw w
-                    if w < 0:
-    #                    scale = w / -self.W0[i][j]
-                        scale = (
-                            0.5
-                            * (w - (self.min_weight - self.W0[i][j]))
-                            / (self.W0[i][j] - self.min_weight)
-                        )
+                    current_w = self.W[i][j]
+                    initial_w = self.W0[i][j]
+                    if current_w < initial_w:
 
-                        R = 1 * (1 - scale)  # From 0 to 1
-                        G = 1 * (1 - scale)  # From 0 to 1
-                        B = 1  # Always blue
+                        # Calculate how far it decreased as a proportion of
+                        # maximum possible decrease 0 = no change, 1 = maximum
+                        # decrease (to min_weight)
+
+                        max_decrease = initial_w - self.min_weight
+                        if max_decrease > 0:
+                            decrease_proportion = (initial_w - current_w) / max_decrease
+                        else:
+                            decrease_proportion = 0
+
+                        # Blue (maximum decrease) to white (no change)
+                        R = 1 - decrease_proportion
+                        G = 1 - decrease_proportion
+                        B = 1  # Always has blue component
+
+                    # If weight stayed the same or increased from initial value
                     else:
-                        scale = (
-                            0.5
-                            + 0.5
-                            * (w / (self.max_weight - self.W0[i][j]))
-                        )
-                        #scale = w / (1 - self.W0[i][j])
-                        R = 1  # Always red
-                        G = 1 * (1 - scale)  # From 1 to 0
-                        B = 1 * (1 - scale)  # From 1 to 0
-                    w_rgba = np.array([R, G, B, 0.1])
+
+                        # Calculate how far it increased as a proportion of
+                        # maximum possible increase 0 = no change, 1 = maximum
+                        # increase (to max_weight)
+
+                        max_increase = self.max_weight - initial_w
+                        if max_increase > 0:
+                            increase_proportion = (
+                                (current_w - initial_w) / max_increase
+                            )
+                        else:
+                            increase_proportion = 0
+
+                        # White (no change) to red (maximum increase)
+                        R = 1  # Always has red component
+                        G = 1 - increase_proportion
+                        B = 1 - increase_proportion
+
                 else:
+                    # Your existing code for when W0 is not supplied
                     w = self.W[i][j]
                     if w <= 0.5:
                         # Map [0, 0.5] to [blue, white]
                         scale = w / 0.5
-                        R = 1 * scale  # From 0 to 1
-                        G = 1 * scale  # From 0 to 1
+                        R = scale  # From 0 to 1
+                        G = scale  # From 0 to 1
                         B = 1  # Always blue
                     else:
                         # Map [0.5, 1] to [white, red]
                         scale = (w - 0.5) / 0.5
                         R = 1  # Always red
-                        G = 1 * (1 - scale)  # From 1 to 0
-                        B = 1 * (1 - scale)  # From 1 to 0
+                        G = 1 - scale  # From 1 to 0
+                        B = 1 - scale  # From 1 to 0
 
-                #if scale < 0.5:
-                #    R = 0
-                #    G = B = 2 * scale
-                #else:
-                #    B = 0
-                #    G = R = 2 * (1 - scale)
-
-                w_rgba = np.array([R, G, B, 0.1])
+                w_rgba = np.array([R, G, B, 0.15])
 
                 center = (
                     self.center

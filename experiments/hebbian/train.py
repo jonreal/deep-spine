@@ -1,6 +1,6 @@
 import argparse
 import json
-import os
+import os, shutil, sys
 import time
 import pickle
 import numpy as np
@@ -8,7 +8,6 @@ import torch
 import traceback
 import matplotlib.pyplot as plt
 import mujoco
-import seaborn as sns
 from scipy import signal
 from pprint import pprint
 
@@ -20,17 +19,48 @@ from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
 
+
+
 def recursive_update(d, u, *, strict=False):
     changed = False
-    for k, v in u.items():
-        if strict and k not in d:
-            raise KeyError(f"[config error] unknown key '{k}' in override")
-        if isinstance(v, dict) and k in d and isinstance(d[k], dict):
-            changed |= recursive_update(d[k], v, strict=strict)
-        else:
-            if k not in d or d[k] != v:
-                d[k] = v
-                changed = True
+
+    # Special handling for lists of dictionaries (like hebbian_kwargs)
+    if isinstance(d, list) and isinstance(u, list):
+        # Make sure the lists are of the same length
+        if len(d) != len(u):
+            raise ValueError(f"[config error] Cannot update a list of length {len(d)} with a list of length {len(u)}")
+
+        # Update each dictionary in the list
+        for i in range(len(d)):
+            if isinstance(d[i], dict) and isinstance(u[i], dict):
+                changed |= recursive_update(d[i], u[i], strict=strict)
+            else:
+                if d[i] != u[i]:
+                    d[i] = u[i]
+                    changed = True
+        return changed
+
+    # Original code for dictionaries
+    if isinstance(d, dict) and isinstance(u, dict):
+        for k, v in u.items():
+            if strict and k not in d:
+                raise KeyError(f"[config error] unknown key '{k}' in override")
+            if isinstance(v, dict) and k in d and isinstance(d[k], dict):
+                changed |= recursive_update(d[k], v, strict=strict)
+            elif isinstance(v, list) and k in d and isinstance(d[k], list):
+                # Handle nested lists (like in hebbian_kwargs)
+                changed |= recursive_update(d[k], v, strict=strict)
+            else:
+                if k not in d or d[k] != v:
+                    d[k] = v
+                    changed = True
+        return changed
+
+    # Default case for non-dictionary, non-list values
+    if d != u:
+        d = u
+        changed = True
+
     return changed
 
 def convert_to_serializable(obj):
@@ -55,30 +85,47 @@ def format_value(v):
     else:
         return str(v)
 
-def build_custom_tag(custom_dict):
-    tag_parts = []
-    for k, v in sorted(custom_dict.items()):
-        if isinstance(v, dict):
-            tag_parts.extend(
-                f'{k[:3]}_{kk[:3]}={format_value(vv)}'
-                for kk, vv in sorted(v.items())
-            )
-        else:
-            tag_parts.append(f'{k[:3]}={format_value(v)}')
-    return "_".join(tag_parts)
-
-def build_annotation_text(config):
+def build_annotation_text(config, prefix=""):
     if config is None:
         return " "
-
     lines = []
-    for k, v in sorted(config.items()):
-        if isinstance(v, dict):
-            for kk, vv in sorted(v.items()):
-                label = f'{k[:3]}_{kk[:3]}'
-                lines.append(f'{label}={format_value(vv)}')
-        else:
-            lines.append(f'{k[:3]}={format_value(v)}')
+    # Handle dictionaries
+    if isinstance(config, dict):
+        for k, v in sorted(config.items()):
+            k_prefix = f"{prefix}_{k[:3]}" if prefix else k[:3]
+            if isinstance(v, dict):
+                # Recursive call for nested dictionaries
+                nested_lines = build_annotation_text(v, k_prefix)
+                lines.extend(nested_lines.split("\n"))
+            elif isinstance(v, list):
+                # Handle list values
+                for i, item in enumerate(v):
+                    if isinstance(item, (dict, list)):
+                        # Use index in the prefix for nested structures
+                        item_prefix = f"{k_prefix}_{i}"
+                        nested_lines = build_annotation_text(item, item_prefix)
+                        lines.extend(nested_lines.split("\n"))
+                    else:
+                        # Simple list items
+                        lines.append(f"{k_prefix}[{i}]={format_value(item)}")
+            else:
+                # Simple key-value pairs
+                lines.append(f"{k_prefix}={format_value(v)}")
+    # Handle lists
+    elif isinstance(config, list):
+        for i, item in enumerate(config):
+            if isinstance(item, (dict, list)):
+                # Use index in the prefix for nested structures
+                item_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
+                nested_lines = build_annotation_text(item, item_prefix)
+                lines.extend(nested_lines.split("\n"))
+            else:
+                # Simple list items
+                index_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
+                lines.append(f"{index_prefix}={format_value(item)}")
+    # Handle simple types
+    else:
+        lines.append(f"{prefix}={format_value(config)}")
     return "\n".join(lines)
 
 def main():
@@ -95,13 +142,11 @@ def main():
     with open(args.config, 'r') as f:
         config = json.load(f)
 
-    custom_tag = ""
     if args.custom:
         changed = recursive_update(config, args.custom)
         if not changed:
             raise ValueError(
                 f"[config error] custom config '{args.custom}' had no effect")
-        custom_tag = build_custom_tag(args.custom)
 
     # --- Unpack config ---
     options = config.get("options", {})
@@ -111,7 +156,7 @@ def main():
 
     log_dir = os.path.join(
         log_top_dir,
-        f'{run_id}{custom_tag}'
+        f'{run_id}'
     )
 
     # Unpack configuration
@@ -172,6 +217,16 @@ def main():
         pickle.dump(all_args, f)
     with open(os.path.join(log_dir, 'settings.txt'), 'w') as f:
         json.dump(convert_to_serializable(all_args), f, indent=4)
+
+    # Copy the --config file
+    shutil.copy(args.config, os.path.join(log_dir, 'config.json'))
+
+    # Capture the raw --custom string
+    if '--custom' in sys.argv:
+        idx = sys.argv.index('--custom') + 1
+        custom_str = sys.argv[idx]
+        with open(os.path.join(log_dir, 'custom.txt'), 'w') as f:
+            f.write(custom_str)
 
     # Initialize simulation components
     spine = IaReflexSpine(**spine_kwargs)
@@ -297,14 +352,13 @@ def main():
     steps_per_eps = env.episode_length / env.model.opt.timestep
     last_write_time = 0.0
 
-    print('---\n', options, '\n---\n\n')
     try:
         for i in range(options.get("num_eps", 50)):
             tstart = time.time()
             done = False
             print('---\n')
             print(
-                f'Eps: {int(env.eps)},'
+                f'Eps: {int(env.eps)}, '
                 f'Muscle strength: {muscle_strength:.2f}'
             )
             last_write_time = 0

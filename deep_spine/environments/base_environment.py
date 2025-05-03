@@ -79,7 +79,6 @@ class BaseEnvironment(object):
             self.stream.pix_fmt = "rgb24"
         else:
 
-            print(self.video_crf);
             self.container = av.open(f"{self.save_frames_to_path}.mp4", 'w')
             self.stream = self.container.add_stream('h264', rate=self.vfps)
             self.stream.pix_fmt = 'yuv420p'
@@ -146,7 +145,6 @@ class BaseEnvironment(object):
         self.cam.distance = distance
         self.cam.lookat = lookat
         glfw.init()
-        print(window_width, window_height)
         self.window = glfw.create_window(
             window_width,
             window_height,
