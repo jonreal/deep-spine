@@ -87,7 +87,7 @@ def format_value(v):
 
 def build_annotation_text(config, prefix=""):
     if config is None:
-        return " "
+        return ""
     lines = []
     # Handle dictionaries
     if isinstance(config, dict):
@@ -126,7 +126,43 @@ def build_annotation_text(config, prefix=""):
     # Handle simple types
     else:
         lines.append(f"{prefix}={format_value(config)}")
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line)
+
+def initialize_weight_matrix(param_value, param_name, default_value=0.2):
+    """Helper function to initialize weight matrices for both Wp0 and Wn0"""
+    if param_value == 0:  # New case: If parameter is 0, return zero matrix
+        return torch.zeros(6, 6, dtype=torch.float32)
+    elif isinstance(param_value, str) and os.path.isfile(param_value):
+        # Load from file
+        data = np.loadtxt(param_value, delimiter=',')
+        last_row = data[-1]
+        return torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
+    else:
+        # Generate random values
+        return torch.normal(
+            mean=options.get(param_name, default_value),
+            std=0.01,
+            size=(6, 6)
+        )
+
+def make_weight_matrix(options, key, default_value=0.2):
+    value = options.get(key)
+
+    # Zero case
+    if value == 0:
+        return torch.zeros(6, 6, dtype=torch.float32)
+
+    # File path case
+    if isinstance(value, str) and os.path.isfile(value):
+        data = np.loadtxt(value, delimiter=',')
+        last_row = data[-1]
+        return torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
+
+    # Default/random case
+    mean_value = default_value if value is None else value
+    return torch.normal(mean=mean_value, std=0.01, size=(6, 6))
+
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -178,26 +214,8 @@ def main():
     min_weight = options.get("min_weight", 0)
     max_weight = options.get("max_weight", 1)
 
-
-    Wp0 = options.get("Wp0")
-    if isinstance(Wp0, str) and os.path.isfile(Wp0):
-        Wp0 = np.loadtxt(Wp0, delimiter=',')
-        last_row = Wp0[-1]
-        Wp0 = torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
-    else:
-        Wp0 = (
-            torch.normal(mean=options.get("Wp0", 0.2), std=0.01, size=(6, 6))
-        )
-
-    Wn0 = options.get("Wn0")
-    if isinstance(Wn0, str) and os.path.isfile(Wn0):
-        Wn0 = np.loadtxt(Wn0, delimiter=',')
-        last_row = Wn0[-1]
-        Wn0 = torch.tensor(last_row[-36:].reshape(6, 6))
-    else:
-        Wn0 = (
-            torch.normal(mean=options.get("Wn0", 0.2), std=0.01, size=(6, 6))
-        )
+    Wp0 = make_weight_matrix(options, "Wp0")
+    Wn0 = make_weight_matrix(options, "Wn0")
 
     env_kwargs.update({
         'save_frames_to_path': sim_animation,

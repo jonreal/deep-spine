@@ -1,7 +1,7 @@
 {
-  "log_top_dir": "./logs/lock_target",
+  "log_top_dir": "./logs/default",
   "options": {
-    "num_eps": 70,
+    "num_eps": 50,
     "seed": 1,
     "damping": 1,
     "viscosity": 0,
@@ -64,9 +64,9 @@
         "W": "spine.net.Wp_Ia",
         "pre": "spine.act_Ia",
         "post": "spine.act_MN",
-        "gain": 2,
+        "gain": 0,
         "learning_rate": 1000,
-        "lock_target": 0.9,
+        "lock_target": false,
         "min_weight": 0,
         "max_weight": 1,
         "Kmean": 0.00004,
