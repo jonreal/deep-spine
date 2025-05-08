@@ -28,6 +28,9 @@ class Babble(BaseSupraspine):
     def update_seed(self, seed):
         self.rng = np.random.default_rng(seed)
 
+    def set_babble_max_prob(self, babble_max_prob):
+        self.babble_max_prob = babble_max_prob
+
     def _initialize(self):
         # State variables
         self.babble_signal = np.zeros(self.n)
