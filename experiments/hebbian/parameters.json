@@ -1,20 +1,20 @@
 {
-  "log_top_dir": "./logs/default",
+  "log_dir": "./logs/default",
   "options": {
-    "num_eps": 50,
+    "num_eps": 200,
     "seed": 1,
     "damping": 1,
     "viscosity": 0,
     "Wp0": 0.2,
     "Wn0": 0.0,
     "muscle_increase_factor": 1.1,
-    "max_muscle_strength": 0.5
+    "max_muscle_strength": 1
   },
   "env_kwargs": {
     "episode_length": 90,
     "muscle_strength": 0.1,
     "frame_rate": 10,
-    "video_scale": 0.66,
+    "video_scale": 0.5,
     "video_crf": 28,
     "window_width": 1200,
     "window_height": 900,

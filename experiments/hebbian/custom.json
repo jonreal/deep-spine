@@ -1,0 +1,18 @@
+{
+  "log_dir": "./logs/exp4/testers",
+  "options": {
+    "num_eps": 500,
+    "max_muscle_strength": 0.3
+  },
+  "supraspine_kwargs": {
+    "babble_max_prob": 0.001
+  },
+  "hebbian_kwargs": [
+    {},
+    {
+      "gain": 5
+    }
+  ]
+}
+
+

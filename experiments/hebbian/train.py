@@ -162,7 +162,11 @@ def make_weight_matrix(options, key, default_value=0.2):
     mean_value = default_value if value is None else value
     return torch.normal(mean=mean_value, std=0.01, size=(6, 6))
 
-
+def parse_json_or_path(s):
+    if os.path.isfile(s):
+        with open(s) as f:
+            return json.load(f)
+    return json.loads(s)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -170,7 +174,7 @@ def main():
     )
     parser.add_argument('--config', required=True,
                         help="Path to default config JSON file.")
-    parser.add_argument('--custom', type=json.loads,
+    parser.add_argument('--custom', type=parse_json_or_path, default=None,
                         help="Path to custom override JSON file (e.g. for options).")
     args = parser.parse_args()
 
@@ -186,13 +190,14 @@ def main():
 
     # --- Unpack config ---
     options = config.get("options", {})
-    log_top_dir = config.get("log_top_dir", "./logs/untitled")
+    root_log_dir = config.get("log_dir", "./logs/untitled")
     now = time.time()
-    run_id = int(now)
+    local_time = time.localtime(now)
+    sim_id = int(now)
 
     log_dir = os.path.join(
-        log_top_dir,
-        f'{run_id}'
+        root_log_dir,
+        f'{sim_id}'
     )
 
     # Unpack configuration
@@ -203,10 +208,7 @@ def main():
     hebbian_kwargs = config.get("hebbian_kwargs", {})
     log_top_dir = config.get("log_top_dir", "./logs/untitled")
 
-    now = time.time()
-    local_time = time.localtime(now)
-    run_id = int(now)
-    date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{run_id}'
+    date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
     os.makedirs(log_dir, exist_ok=True)
     sim_animation = f'./{log_dir}/sim'
 
@@ -336,13 +338,13 @@ def main():
         ysymmetric=True
     )
     fig.figure.flg_selection = 1
-    fig.figure.selection = env.muscle_strength
+    fig.figure.selection = env.muscle_strength.item()
     env.add_fig(fig)
 
     annotation_text = build_annotation_text(args.custom)
     annotation = viz.Annotation(
         text=annotation_text,
-        viewport=mujoco.MjrRect(340, 90, 200, 200),
+        viewport=mujoco.MjrRect(390, 90, 200, 200),
         gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
     )
     env.add_annotation(annotation)
@@ -369,6 +371,8 @@ def main():
     env.reset()
     steps_per_eps = env.episode_length / env.model.opt.timestep
     last_write_time = 0.0
+    tinit = time.time()
+    print(date_string);
 
     try:
         for i in range(options.get("num_eps", 50)):
@@ -385,27 +389,26 @@ def main():
                 for learner in learners:
                     learner.step()
 
-                current_time = env.data.time
+                current_time = int(
+                    env.data.time + 1/env.simulation_sampling_rate
+                )
 
-                if current_time - last_write_time >= 1.0:
+                if current_time > 0 and current_time > int(last_write_time):
 
-                    vals = ",".join(
+                    _Wn_Ia = ",".join(
                         map(str, spine.net.Wn_Ia.flatten().tolist())
                     )
-                    with open(f"./{log_dir}/W_n.txt", "a") as f:
-                        f.write(
-                            f"{i},"
-                            f"{current_time:.2f},"
-                            f"{vals}\n"
-                        )
-                    vals = ",".join(
+                    _Wp_Ia = ",".join(
                         map(str, spine.net.Wp_Ia.flatten().tolist())
                     )
-                    with open(f"./{log_dir}/W_p.txt", "a") as f:
+                    _muscle_strength = muscle_strength
+                    with open(f"./{log_dir}/data.txt", "a") as f:
                         f.write(
-                            f"{i},"
+                            f"{i+1},"
                             f"{current_time:.2f},"
-                            f"{vals}\n"
+                            f"{_muscle_strength},"
+                            f"{_Wn_Ia},"
+                            f"{_Wp_Ia}\n"
                         )
                     last_write_time = current_time
 
@@ -419,6 +422,12 @@ def main():
             print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
             print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
             print('---\n\n')
+
+
+        print('\n---\n')
+        print(f'Total sim time: {(tend - tinit):.1f} (sec), '
+              f'({(tend - tinit) / 60:.1f} min)')
+        print('\n---\n')
     except Exception as e:
         tb = traceback.format_exc()
         print(f"Error during simulation: {str(e)}")

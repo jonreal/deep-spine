@@ -223,7 +223,7 @@ class BaseEnvironment(object):
                     )
 
            # Add timestamp text
-            timestamp = f"Eps: {int(self.eps)}, Time: {self.data.time:.2f}s"
+            timestamp = f"\nEps: {int(self.eps)}, Time: {self.data.time:.2f}s"
             mujoco.mjr_overlay(
                 mujoco.mjtFont.mjFONT_NORMAL,
                 mujoco.mjtGridPos.mjGRID_TOP,

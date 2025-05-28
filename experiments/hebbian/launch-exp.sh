@@ -1,50 +1,39 @@
 #!/bin/bash
 
-# Array of values for lock_target
-values=(1 2 3 4 5)
+LOG_DIR="./logs/exp4/sweep_strength_babble_gain"
+mkdir -p "$LOG_DIR"
+export LOG_DIR  # make it available to subshells
 
-LOG_DIR="./logs/exp2/seed"
+format_custom_json() {
+    local log_dir="$1"
+    local strength="$2"
+    local babble="$3"
+    local gain="$4"
+    cat <<EOF
+{
+  "log_dir": "$log_dir",
+  "options": {
+    "max_muscle_strength": $strength
+  },
+  "supraspine_kwargs": {
+    "babble_max_prob": $babble
+  },
+  "hebbian_kwargs": [
+    {},
+    {
+      "gain": $gain
+    }
+  ]
+}
+EOF
+}
 
-# Directory path
-DIR="/Users/jonreal/research/deep-spine/experiments/hebbian"
-MYENV_PATH="../../myenv/bin/activate"
+export -f format_custom_json
 
-# Create a unique session name using timestamp
-SESSION_NAME="exp_$(date +%s)"
-
-# Start a new tmux session
-tmux new-session -d -s $SESSION_NAME
-
-# For each value, create a pane and run the command
-for ((i=0; i<${#values[@]}; i++)); do
-    # For the first value, use the existing pane
-    # For subsequent values, create a new pane
-    if [ $i -gt 0 ]; then
-        tmux split-window -v -t $SESSION_NAME
-    fi
-
-    # Send commands separately to avoid quoting issues
-    tmux send-keys -t $SESSION_NAME:0.$i "cd $DIR" C-m
-    tmux send-keys -t $SESSION_NAME:0.$i "source $MYENV_PATH" C-m
-
-    # Add a small random variation to the learning_rate to ensure the config has an effect
-    tmux send-keys -t $SESSION_NAME:0.$i \
-        "python train.py --config parameters.json" \
-        " --custom " \
-        " '{ \"log_top_dir\": \"${LOG_DIR}\", " \
-        " \"options\": " \
-        " {\"seed\":${values[$i]}, \"damping\": 1, " \
-        " \"max_muscle_strength\": 0.5, \"muscle_increase_factor\": 1.1}, " \
-        " \"env_kwargs\": {\"episode_length\": 90}, " \
-        " \"hebbian_kwargs\": [{},{\"gain\": 2, \"lock_target\": 0.9}]}'" C-m
-
-    sleep 2
-
-    # Equalize all panes (make them the same size)
-    tmux select-layout -t $SESSION_NAME even-vertical
-
-done
-
-    tmux select-layout -t $SESSION_NAME tiled
-
-echo "All experiments started in tmux session: $SESSION_NAME"
+parallel --delay 2 --line-buffer --tag --jobs 20 '
+  source ../../myenv/bin/activate &&
+  JSON=$(format_custom_json "$LOG_DIR" {1} {2} {3}) &&
+  python train.py \
+    --config parameters.json \
+    --custom "$JSON"
+' ::: 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 ::: 0.001 0.0025 0.005 0.01 0.025 0.05 0.1 ::: 0.5 1 1.5 2 2.5
