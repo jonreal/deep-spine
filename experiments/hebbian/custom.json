@@ -5,12 +5,12 @@
     "max_muscle_strength": 0.3
   },
   "supraspine_kwargs": {
-    "babble_max_prob": 0.001
+    "babble_max_prob": 0.0001
   },
   "hebbian_kwargs": [
     {},
     {
-      "gain": 5
+      "gain": 100
     }
   ]
 }
