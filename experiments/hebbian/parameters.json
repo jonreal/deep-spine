@@ -14,8 +14,8 @@
     "episode_length": 90,
     "muscle_strength": 0.1,
     "frame_rate": 10,
-    "video_scale": 0.5,
-    "video_crf": 28,
+    "video_scale": 0.2,
+    "video_crf": 32,
     "window_width": 1200,
     "window_height": 900,
     "lookat": [0.45, -0.2, -0.5]
