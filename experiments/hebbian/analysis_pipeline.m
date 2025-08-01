@@ -84,23 +84,11 @@ function summary_table = analysis_pipeline(path_to_experiments,opt)
         U, S, V, 'UniformOutput', false);
 
       % Abolute synergy analysis
-      %Rf_a = [cellfun(@(W) (sum((W .* mRf), 'all') ./ sum(mRf,'all')), We)]';
-      %Re_a = [cellfun(@(W) (sum((W .* mRe), 'all') ./ sum(mRe,'all')), We)]';
-      %Sf_a = [cellfun(@(W) (sum((W .* mSf), 'all') ./ sum(mSf,'all')), We)]';
-      %Se_a = [cellfun(@(W) (sum((W .* mSe), 'all') ./ sum(mSe,'all')), We)]';
-      %Af_a = [cellfun(@(W) (sum((W .* mAf), 'all') ./ sum(mAf,'all')), We)]';
-      %Ae_a = [cellfun(@(W) (sum((W .* mAe), 'all') ./ sum(mAe,'all')), We)]';
       R_a = [cellfun(@(W) (sum((W .* mR), 'all') ./ sum(mR,'all')), We)]';
       S_a = [cellfun(@(W) (sum((W .* mS), 'all') ./ sum(mS,'all')), We)]';
       A_a = [cellfun(@(W) (sum((W .* mA), 'all') ./ sum(mA,'all')), We)]';
 
       % Relative synergy analysis
-      %Rf_r = [cellfun(@(W) (sum((W .* mRf), 'all') ./ sum(W,'all')), We)]';
-      %Re_r = [cellfun(@(W) (sum((W .* mRe), 'all') ./ sum(W,'all')), We)]';
-      %Sf_r = [cellfun(@(W) (sum((W .* mSf), 'all') ./ sum(W,'all')), We)]';
-      %Se_r = [cellfun(@(W) (sum((W .* mSe), 'all') ./ sum(W,'all')), We)]';
-      %Af_r = [cellfun(@(W) (sum((W .* mAf), 'all') ./ sum(W,'all')), We)]';
-      %Ae_r = [cellfun(@(W) (sum((W .* mAe), 'all') ./ sum(W,'all')), We)]';
       R_r = [cellfun(@(W) (sum((W .* mR), 'all') ./ sum(W,'all')), We)]';
       S_r = [cellfun(@(W) (sum((W .* mS), 'all') ./ sum(W,'all')), We)]';
       A_r = [cellfun(@(W) (sum((W .* mA), 'all') ./ sum(W,'all')), We)]';
@@ -118,7 +106,7 @@ function summary_table = analysis_pipeline(path_to_experiments,opt)
       synergy_meausres_str = {'max', 'mean', 'var'};
       synergy_outcomes = cellfun( ...
         @(signal) cellfun( ...
-          @(measure) measure(signal(end-4000:end)), ...
+          @(measure) measure(signal(end-100:end)), ...
           synergy_measures, 'UniformOutput', false), ...
         signals, 'UniformOutput', false);
 
@@ -234,18 +222,10 @@ function summary_table = analysis_pipeline(path_to_experiments,opt)
         ys = 0.35;
         pos = [xs, ys, w, h];
         ax = axes('Position',pos);
-%        trace_list = { ...
-%          {Rf_r, rgb_val(1,:)}, ...
-%          {Re_r, rgb_val(2,:)}, ...
-%          {Sf_r, rgb_val(3,:)}, ...
-%          {Se_r, rgb_val(4,:)}, ...
-%          {Af_r, rgb_val(5,:)}, ...
-%          {Ae_r, rgb_val(6,:)}, ...
-%        };
         trace_list = { ...
-          {R_r, rgb_val(2,:)}, ...
-          {S_r, rgb_val(4,:)}, ...
-          {A_r, rgb_val(6,:)}, ...
+          {gradient(R_a), rgb_val(2,:)}, ...
+          {gradient(S_a), rgb_val(4,:)}, ...
+          {gradient(A_a) rgb_val(6,:)}, ...
         };
         for i=1:numel(trace_list)
           p = plot(trace_list{i}{1},'-o'); hold all;
@@ -255,7 +235,7 @@ function summary_table = analysis_pipeline(path_to_experiments,opt)
         axis tight;
         xticklabels({});
         ylim([0,1]);
-        ylabel({'Relative','||W * M|| / ||W||'})
+        ylabel('dAbsolute')
         ax.Color = 'none';
 
 

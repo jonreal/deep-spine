@@ -10,15 +10,18 @@ import matplotlib.pyplot as plt
 import mujoco
 from scipy import signal
 from pprint import pprint
+from pathlib import Path
+from scipy import signal
 
 # Deep spine imports
 from deep_spine import Arm26Babble, HebbianLearner
 from deep_spine.spine.ia_reflex import IaReflexSpine
+from deep_spine.spine.filters.fir import FirFilt
+from deep_spine.spine.filters.iir import IirFilt
 from deep_spine.supraspine.babble import Babble
 from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
-
 
 
 def recursive_update(d, u, *, strict=False):
@@ -245,8 +248,13 @@ def main():
     if '--custom' in sys.argv:
         idx = sys.argv.index('--custom') + 1
         custom_str = sys.argv[idx]
+        custom_path = Path(custom_str)
         with open(os.path.join(log_dir, 'custom.txt'), 'w') as f:
-            f.write(custom_str)
+            if custom_path.exists() and custom_path.suffix == '.json':
+                with open(custom_path, 'r') as cf:
+                    f.write(cf.read())
+            else:
+                f.write(custom_str)
 
     # Initialize simulation components
     spine = IaReflexSpine(**spine_kwargs)
@@ -374,6 +382,18 @@ def main():
     tinit = time.time()
     print(date_string);
 
+    N1 = env.episode_length/10;
+    movavg1 = FirFilt(np.ones(int(N1))/N1)
+
+    N2 = env.episode_length;
+    movavg2 = FirFilt(np.ones(int(N2))/N2)
+
+    fc = 0.01
+    b, a = signal.butter(1, fc/(1/2),'low')
+    lowpass = IirFilt(b, a)
+
+
+
     try:
         for i in range(options.get("num_eps", 50)):
             tstart = time.time()
@@ -394,6 +414,13 @@ def main():
                 )
 
                 if current_time > 0 and current_time > int(last_write_time):
+
+
+                    wp = spine.net.Wp_Ia.sum() / spine.net.Wp_Ia.numel()
+                    avg = movavg1.filter(wp)
+                    ddt_avg = 1/(2*np.pi*fc)*(avg - lowpass.filter(avg))
+                    criteria = movavg2.filter(ddt_avg)
+                    #print(wp, avg, ddt_avg, convergence)
 
                     _Wn_Ia = ",".join(
                         map(str, spine.net.Wn_Ia.flatten().tolist())
@@ -421,7 +448,16 @@ def main():
             env.set_muscle_strength(muscle_strength)
             print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
             print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
+            print(f'convergence criteria (epsilon): {abs(criteria):.6f}'
+                  f' ({options.get("epsilon")})')
             print('---\n\n')
+
+            if abs(criteria) < options.get("epsilon"):
+                print('\n---\n')
+                print('Simulation converged')
+                print('\n---\n')
+                break;
+
 
 
         print('\n---\n')

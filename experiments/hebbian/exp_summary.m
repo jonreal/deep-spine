@@ -1,4 +1,4 @@
-function exp_summary(tab,opt)
+function Z_all = exp_summary(tab,opt)
   arguments
     tab
     opt.outdir (1,1) string = './summary'
@@ -8,27 +8,90 @@ function exp_summary(tab,opt)
   babble_prob = unique(tab.sup_kwa_bab_max_pro);
   gains = unique(tab.('heb_kwa_{2}_gai'));
 
-  cmap = cbrewer('qual','Accent',numel(gains));
+  cmap = flipud(cbrewer('div','RdBu',64));
 
-  alpha = 0.5
-  N = 100;
+  alpha = 1;
+  N = 500;
+  scale = 'log';
 
   quiries = { ...
-    'R_r_mean', 'S_r_mean', 'R_a_mean', 'S_a_mean', 'A_a_mean', 'A_r_mean' ...
+    'R_a_mean', 'S_a_mean', 'A_a_mean' ...
   };
-  for q=1:numel(quiries)
-    figure;
-    legend_list = [];
-    for i=1:numel(gains)
+
+  nrows = numel(gains);
+  ncols = numel(quiries) + 1;
+
+  aspect_ratio = nrows / ncols;
+
+  pxh = 800;
+  pxw = pxh / aspect_ratio;
+
+  figure('Position', [431 28 958 1309]);
+  xl = [min(tab.opt_max_mus_str), max(tab.opt_max_mus_str)];
+  yl = [min(tab.sup_kwa_bab_max_pro), max(tab.sup_kwa_bab_max_pro)];
+  zl = [0, 1];
+
+  yspace = 0.01;
+  xspace = 0.01;
+  xpad = 0.07;
+  ypad = 0.045;
+
+  gainFudge = 0.9;
+
+  h = (1 - 2*ypad - (nrows-1)*yspace) / nrows;
+  w = (1 - 2*xpad - (ncols-1)*xspace) / ncols;
+
+  x0 = xpad;
+  y0 = 1 - ypad - h;
+
+  legend_list = [];
+  axes_list = zeros(1, nrows*ncols);
+  indx = 1;
+  ys = y0;
+
+  qlab = {'Reflex (R)', ...
+          'Synergy (S)', ...
+          'Antagonist (A)' ...
+           'R*S*(1-A)'};
+
+  Z_all = cell(numel(gains), numel(quiries));
+  for i=1:numel(gains)
+    xs = x0;
+    for q=1:numel(quiries)
+
+      pos = [xs, ys, w, h];
+
+      if i==1
+        ann = annotation('textbox',pos + [0, ypad/2, 0, 0]);
+        ann.String = qlab{q};
+        ann.FontSize = 12;
+        ann.HorizontalAlignment = 'center';
+        ann.VerticalAlignment = 'top';
+        ann.EdgeColor = 'none';
+
+        if q==1
+          ann = annotation('textbox',pos + [-xpad*gainFudge, ypad/2, 0, 0]);
+          ann.String = 'Gain';
+          ann.FontSize = 12;
+          ann.HorizontalAlignment = 'left';
+          ann.VerticalAlignment = 'top';
+          ann.EdgeColor = 'none';
+        end
+      end
+
+
+
+      ax = axes('Position', pos);
 
       iq = find(tab.('heb_kwa_{2}_gai') == gains(i));
       x = tab.opt_max_mus_str(iq);
       y = tab.sup_kwa_bab_max_pro(iq);
       z = tab.(quiries{q})(iq);
 
-      p = scatter3(x,y,z)
-      p.MarkerEdgeColor = 'w'
+      p = scatter3(x,y,z);
+      p.MarkerEdgeColor = cmap(i,:);
       p.MarkerFaceColor = cmap(i,:);
+      p.Marker = '.';
 
       % Create interpolant object
       F = scatteredInterpolant(x, y, z, 'linear', 'none');
@@ -39,28 +102,116 @@ function exp_summary(tab,opt)
 
       % Evaluate interpolant on grid
       Z = F(X, Y);
+      Z_all{i, q} = Z;
 
       hold all;
       % Plot with mesh or surf
       p = surf(X, Y, Z);
-      p.FaceColor = cmap(i,:);
       p.FaceAlpha = alpha;
-      p.EdgeColor = cmap(i,:);
+      p.EdgeColor = 'none';
       legend_list(end+1) = p;
 
-      xlabel('Muscle Strength');
-      ylabel('Babble Probability')
-      p = title(quiries{q})
-      p.Interpreter = 'none';
+      %imagesc([min(X),max(X)],[min(Y),max(Y)],Z);
+      %[~,p] = contourf(X, Y, Z);
+      %p.FaceAlpha = alpha;
+      colormap(cmap);
+      caxis(zl);
 
+      ax.YAxis.Scale = scale;
+
+      if ~(q == 1)
+        ax.YAxis.TickLabels = {};
+      end
+      if ~(i == numel(gains))
+        ax.XAxis.TickLabels = {};
+      end
+
+      if q==1 && i==numel(gains)
+        xlabel('Strength');
+        ylabel('Probability');
+      end
+
+
+
+      axes_list(indx) = ax;
+      indx = indx + 1;
+
+
+      xlim(xl);
+      ylim(yl);
+      zlim(zl);
+
+      view(0,90)
+
+      if q ==1
+        ann = annotation('textbox',pos + [-xpad*gainFudge, 0, 0, 0]);
+        ann.String = num2str(gains(i));
+        ann.FontSize = 12;
+        ann.HorizontalAlignment = 'left';
+        ann.VerticalAlignment = 'middle';
+        ann.EdgeColor = 'none';
+      end
+
+      xs = xs + w + xspace;
     end
-    gains_str = arrayfun(@num2str, gains, 'UniformOutput', false);
-    legend(legend_list,gains_str)
-    if ~exist(opt.outdir, 'dir')
-        mkdir(opt.outdir);
-    end
-    print([opt.outdir{:},'/',quiries{q},'.png'],'-dpng');
-    fprintf(['Saved figure to: ', [opt.outdir{:},'/',quiries{q},'.png'], '\n\n']);
-    %close(gcf);
+    ys = ys - (h + yspace);
+    %gains_str = arrayfun(@num2str, gains, 'UniformOutput', false);
+    %legend(legend_list,gains_str)
+    %if ~exist(opt.outdir, 'dir')
+    %    mkdir(opt.outdir);
+    %end
+    %print([opt.outdir{:},'/',quiries{q},'.png'],'-dpng');
+    %ax = gca;
+    %%close(gcf);
   end
+  linkaxes(axes_list,'xyz');
+  %fprintf(['Saved figure to: ', [opt.outdir{:},'/summary.png'], '\n\n']);
+  %
+  p = colorbar;
+  p.Position = [1-xpad*0.9, ypad, xpad/4, 1-2*ypad];
+
+  xs = x0 + (ncols-1)*(w + xspace);
+  ys = y0;
+  for g=1:numel(gains)
+    pos = [xs, ys, w, h];
+
+    if g==1
+      ann = annotation('textbox',pos + [0, ypad/2, 0, 0]);
+      ann.String = qlab{end};
+      ann.FontSize = 12;
+      ann.HorizontalAlignment = 'center';
+      ann.VerticalAlignment = 'top';
+      ann.EdgeColor = 'none';
+    end
+
+    ax = axes('Position', pos);
+    hold all;
+    score = Z_all{g,1}.*Z_all{g,2}.*(1 - Z_all{g,3});
+    p = surf(X, Y, score);
+    p.FaceAlpha = alpha;
+    p.EdgeColor = 'none';
+    legend_list(end+1) = p;
+
+
+    %imagesc([min(X),max(X)],[min(Y),max(Y)],Z);
+    %[~,p] = contourf(X, Y, score);
+    %p.FaceAlpha = alpha;
+    colormap(cmap);
+    caxis(zl);
+
+    ax.YAxis.Scale = scale;
+
+    xlim(xl);
+    ylim(yl);
+    zlim(zl);
+
+    view(0,90)
+
+    ax.YAxis.TickLabels = {};
+    if ~(g == numel(gains))
+      ax.XAxis.TickLabels = {}
+    end
+    ys = ys - (h + yspace);
+  end
+
 end

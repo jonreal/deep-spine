@@ -17,6 +17,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
         muscle_strength: float = 1,
+        relative_muscle_scale: np.ndarray = None,
         episode_length: int = 100,
         seed: Optional[int] = 12345,
         xml_path: str = 'arm26.xml',
@@ -73,7 +74,13 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed)
 
-        self.max_muscle_strengths = self.model.actuator_gainprm[:,3].copy()
+        if relative_muscle_scale is None:
+            relative_muscle_scale = np.ones(self.model.nu)
+        self.relative_muscle_scale = relative_muscle_scale
+
+        self.default_muscle_strengths = (
+                relative_muscle_scale * self.model.actuator_gainprm[:,3]
+        )
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
 
@@ -84,7 +91,11 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
-        self.model.actuator_gainprm[:,3] = strength * self.max_muscle_strengths
+        self.model.actuator_gainprm[:,3] = (
+            strength * self.default_muscle_strengths
+        )
+        #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
+
 
     def initialize_spine(self, spine):
         spine.initialize(self.model, self.data)

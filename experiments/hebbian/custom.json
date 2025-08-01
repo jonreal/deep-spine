@@ -1,16 +1,15 @@
 {
-  "log_dir": "./logs/exp4/testers",
+  "log_dir": "./logs/exp5/default",
   "options": {
-    "num_eps": 500,
-    "max_muscle_strength": 0.3
+    "max_muscle_strength": 0.4
   },
   "supraspine_kwargs": {
-    "babble_max_prob": 0.0001
+    "babble_max_prob": 0.01
   },
   "hebbian_kwargs": [
     {},
     {
-      "gain": 100
+      "gain": 2
     }
   ]
 }
