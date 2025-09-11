@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_DIR="./logs/exp5/sweep_strength_babble_gain_0"
+LOG_DIR="./logs/exp9/sweep_strength_babble_gain_0"
 mkdir -p "$LOG_DIR"
 export LOG_DIR  # make it available to subshells
 
@@ -46,13 +46,22 @@ export -f format_custom_json
 #    --custom "$JSON"
 #' ::: 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 ::: 0.0001 0.00025 0.0005 0.00075 0.0075 ::: 0.5 1 1.5 2 2.5
 
+#parallel --delay 2 --line-buffer --tag --jobs 25 '
+#  source ../../myenv/bin/activate &&
+#  JSON=$(format_custom_json "$LOG_DIR" {1} {2} {3}) &&
+#  python train.py \
+#    --config parameters.json \
+#    --custom "$JSON"
+#' ::: 0.1 0.2 0.3 0.4 0.5 0.6 ::: 0.0003 0.0007 0.0018 0.0042 0.0100 ::: 2 2.5 3 3.5 4 4.5 5
+#
+
 parallel --delay 2 --line-buffer --tag --jobs 25 '
   source ../../myenv/bin/activate &&
   JSON=$(format_custom_json "$LOG_DIR" {1} {2} {3}) &&
   python train.py \
     --config parameters.json \
     --custom "$JSON"
-' ::: 0.1 0.2 0.3 0.4 0.5 0.6 ::: 0.0003 0.0007 0.0018 0.0042 0.0100 ::: 2 2.5 3 3.5 4 4.5 5
+' ::: 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1 ::: 0.0003 0.0007 0.0018 0.0042 0.0100 ::: 2 2.5 3 3.5 4 4.5 5
 
 
 

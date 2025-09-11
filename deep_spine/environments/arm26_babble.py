@@ -12,7 +12,7 @@ from deep_spine.spine.filters import iir
 class Arm26Babble(BaseEnvironment, gym.Env):
     def __init__(
         self,
-        path_to_logfile: Optional[str] = None,
+        path_to_log: Optional[str] = None,
         task: Optional[str] = '',
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
@@ -50,9 +50,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             distance=distance,
             lookat=lookat
         )
-        if path_to_logfile:
+        if path_to_log:
             self.logfile = (
-                open(path_to_logfile,'ab') if path_to_logfile else None
+                open(path_to_log,'ab') if path_to_log else None
             )
         else:
             self.logfile = None
@@ -157,9 +157,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         info = {}
         return {}, {}
 
-    def set_logfile(self, path_to_logfile):
-        if path_to_logfile:
-            self.logfile = open(path_to_logfile, 'ab')
+    def set_logfile(self, path_to_log):
+        if path_to_log:
+            self.logfile = open(path_to_log, 'ab')
         else:
             self.logfile = None
 
@@ -170,6 +170,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
     def _write_data_to_logfile(self):
         if self.logfile:
             data = np.concatenate([
+                np.array([self.data.time]),
                 self.data.qpos,
                 self.data.qvel,
                 self.spine.length,
@@ -178,9 +179,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
                 self.spine.act_II,
                 self.spine.act_Ia,
                 self.supraspine.drive,
-                self.spine.act_aMN,
+                self.spine.act_MN,
                 self.spine.act_muscle,
-                self.spine.activation,
+                self.spine.act,
             ])
             # As a string
             #data_str = ','.join(map('{:.6f}'.format, data))

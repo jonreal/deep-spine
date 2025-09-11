@@ -11,7 +11,7 @@ class HebbianLearner:
         W,
         pre,
         post,
-        path_to_logfile = './hebbian-data',
+        path_to_log = './hebbian-data',
         gain = 1,
         learning_rate=0.01,
         lock_target = None,
@@ -36,8 +36,8 @@ class HebbianLearner:
         self.data_cache = None
         self.lock_target = lock_target
         self.postive_only = postive_only
-        if path_to_logfile:
-            self.logfile = open(path_to_logfile, 'ab')
+        if path_to_log:
+            self.logfile = open(path_to_log, 'ab')
 
         self.learning_filter = [
             [iir.IirFilt([0, Klearn], [1, Klearn-1]) for _ in range(self.n)]
@@ -62,9 +62,9 @@ class HebbianLearner:
         self.rate = torch.zeros(self.n,self.n)
         self.dW = torch.zeros(self.n,self.n)
 
-    def set_logfile(self, path_to_logfile):
-        if path_to_logfile:
-            self.logfile = open(path_to_logfile, 'ab')
+    def set_logfile(self, path_to_log):
+        if path_to_log:
+            self.logfile = open(path_to_log, 'ab')
         else:
             self.logfile = None
 
@@ -110,7 +110,7 @@ class HebbianLearner:
         self.dW.copy_(dW)
 
         self.W.add_(self.dW)
-        self.W.clamp_(min=self.min_weight, max=self.max_weight)
+        # self.W.clamp_(min=self.min_weight, max=self.max_weight)
 
 #        pre = torch.tensor(self.pre_synaptic, dtype=torch.float32)
 #        post = torch.tensor(self.post_synaptic, dtype=torch.float32)
@@ -175,7 +175,10 @@ class HebbianLearner:
 #        self.data_cache = data
 #        #data_str = ','.join(map('{:.6f}'.format, data))
 #        #print(data_str, file=self.logfile)
-#        #self.logfile.write(data.tobytes())
+
+        data = np.array([self.W.flatten()])
+        if self.logfile:
+            self.logfile.write(data.tobytes())
 
 
 class HebbianMonitorFigure:

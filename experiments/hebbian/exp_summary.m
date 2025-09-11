@@ -187,10 +187,22 @@ function Z_all = exp_summary(tab,opt)
     ax = axes('Position', pos);
     hold all;
     score = Z_all{g,1}.*Z_all{g,2}.*(1 - Z_all{g,3});
+
+    [max_score,indx] = max(score(:));
+    xm = X(:);
+    xm = xm(indx);
+    ym = Y(:);
+    ym = ym(indx);
+
     p = surf(X, Y, score);
     p.FaceAlpha = alpha;
     p.EdgeColor = 'none';
     legend_list(end+1) = p;
+
+    ps = scatter3(xm,ym,max_score);
+    ps.MarkerFaceColor = 'black';
+    ps.MarkerEdgeColor = 'black';
+    text(xm+0.02,ym,max_score,num2str(max_score));
 
 
     %imagesc([min(X),max(X)],[min(Y),max(Y)],Z);

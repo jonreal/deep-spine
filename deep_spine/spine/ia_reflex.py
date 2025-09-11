@@ -91,9 +91,19 @@ class IaReflex(nn.Module):
         #            act_Ia[j] * torch.clip(self.Wp_Ia[i, j], 0, 1)
         #            -1 * act_Ia[j] * torch.clip(self.Wn_Ia[i, j], 0, 1)
         #        )
+
+        # Clamped
+        #synaptic_activation = (
+        #    torch.matmul(
+        #        torch.clip(self.Wp_Ia, 0, 1) - torch.clip(self.Wn_Ia, 0, 1),
+        #        act_Ia
+        #    ) + drive
+        #)
+
+        # Not clamped
         synaptic_activation = (
             torch.matmul(
-                torch.clip(self.Wp_Ia, 0, 1) - torch.clip(self.Wn_Ia, 0, 1),
+                self.Wp_Ia - self.Wn_Ia,
                 act_Ia
             ) + drive
         )

@@ -101,9 +101,7 @@ class aMN(nn.Module):
         synaptic_act = torch.zeros(self.n)
         for i in range(self.n):
             for j in range(self.n):
-                synaptic_act[i] += (
-                    act_Ia[j] * torch.clip(self.W_Ia[i, j], -1, 1)
-                )
+                synaptic_act[i] += act_Ia[j] * self.W_Ia[i, j]
         activity = synaptic_act + descending_drive
         open_channels = torch.abs(activity)
         a = torch.tensor([

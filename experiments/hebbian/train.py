@@ -179,6 +179,7 @@ def main():
                         help="Path to default config JSON file.")
     parser.add_argument('--custom', type=parse_json_or_path, default=None,
                         help="Path to custom override JSON file (e.g. for options).")
+    parser.add_argument('--log', action='store_true', help="Enable logging.");
     args = parser.parse_args()
 
     # Load the default configuration
@@ -202,6 +203,7 @@ def main():
         root_log_dir,
         f'{sim_id}'
     )
+    os.makedirs(log_dir, exist_ok=True)
 
     # Unpack configuration
     options = config.get("options", {})
@@ -211,13 +213,18 @@ def main():
     hebbian_kwargs = config.get("hebbian_kwargs", {})
     log_top_dir = config.get("log_top_dir", "./logs/untitled")
 
+    if args.log:
+        env_log = os.path.join(log_dir, "env.txt")
+        hebbian_log = os.path.join(log_dir, "hebbian.txt")
+        env_kwargs["path_to_log"] = env_log
+        hebbian_kwargs[1]["path_to_log"] = hebbian_log
+
     date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
-    os.makedirs(log_dir, exist_ok=True)
     sim_animation = f'./{log_dir}/sim'
 
     torch.manual_seed(options.get("seed", 1))
-    min_weight = options.get("min_weight", 0)
-    max_weight = options.get("max_weight", 1)
+    min_weight = hebbian_kwargs[1]["min_weight"];
+    max_weight = hebbian_kwargs[1]["max_weight"];
 
     Wp0 = make_weight_matrix(options, "Wp0")
     Wn0 = make_weight_matrix(options, "Wn0")
@@ -293,7 +300,7 @@ def main():
         center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
         size=0.05,
         min_weight=0,
-        max_weight=1,
+        max_weight=max_weight,
         W=spine.net.Wp_Ia,
         title='excitatory',
     )
@@ -305,7 +312,7 @@ def main():
         W=spine.net.Wp_Ia,
         W0=W0,
         min_weight=0,
-        max_weight=1,
+        max_weight=max_weight,
         notext=True,
         spacing=2
     )

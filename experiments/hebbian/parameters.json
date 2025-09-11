@@ -1,7 +1,7 @@
 {
   "log_dir": "./logs/default",
   "options": {
-    "num_eps": 2000,
+    "num_eps": 32,
     "seed": 1,
     "damping": 1,
     "viscosity": 0,
@@ -9,14 +9,14 @@
     "Wn0": 0.0,
     "muscle_increase_factor": 1.1,
     "max_muscle_strength": 1,
-    "epsilon": 1e-6
+    "epsilon": 1e-5
   },
   "env_kwargs": {
     "episode_length": 90,
     "muscle_strength": 0.1,
-    "relative_muscle_scale": [0.75, 0.75, 0.5, 0.5, 1.0, 1.0],
-    "frame_rate": [],
-    "video_scale": 0.5,
+    "relative_muscle_scale": [1, 1, 0.5, 0.5, 0.25, 0.25],
+    "frame_rate": 10,
+    "video_scale": 1,
     "video_crf": 28,
     "window_width": 1200,
     "window_height": 900,

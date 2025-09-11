@@ -7,7 +7,6 @@ click==8.1.7
 cloudpickle==3.0.0
 contourpy==1.2.1
 cycler==0.12.1
--e git+ssh://git@github.com/jonreal/deep-spine.git@783bd3b5aa91a0d941d8e61625691130fd22498e#egg=deep_spine
 deepdiff==7.0.1
 dm-control==1.0.16
 dm-env==1.6
