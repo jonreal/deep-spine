@@ -23,29 +23,19 @@ class IaReflex(nn.Module):
         static_leak = 0.1,
         dynamic_leak = 1.1,
         shunt_model='linear',
-        Wp_Ia = None,
-        Wn_Ia = None,
+        W_Ia = None,
         ):
         super().__init__()
         self.n = num_motor_units
 
-        if Wp_Ia is None:
-            self.Wp_Ia = nn.Parameter(
+        if W_Ia is None:
+            self.W_Ia = nn.Parameter(
                 torch.normal(mean=0.3, std=0.03,  size=(self.n, self.n)),
                 requires_grad=False
             )
         else:
-            self.Wp_Ia = nn.Parameter(
-                Wp_Ia.clone().detach(),requires_grad=False
-            )
-        if Wn_Ia is None:
-            self.Wn_Ia = nn.Parameter(
-                torch.normal(mean=0.3, std=0.03,  size=(self.n, self.n)),
-                requires_grad=False
-            )
-        else:
-            self.Wn_Ia = nn.Parameter(
-                Wn_Ia.clone().detach(), requires_grad=False
+            self.W_Ia = nn.Parameter(
+                W_Ia.clone().detach(),requires_grad=False
             )
 
         self.II = II(
@@ -101,8 +91,7 @@ class IaReflex(nn.Module):
         #)
 
         # Not clamped
-        # removed inhibition
-        synaptic_activation = torch.matmul(self.Wp_Ia, act_Ia) + drive
+        synaptic_activation = torch.matmul(self.W_Ia, act_Ia) + drive
 
         act_MN = self.MN(synaptic_activation)
         act_muscle = self.muscle(act_MN)

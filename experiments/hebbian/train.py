@@ -131,7 +131,7 @@ def build_annotation_text(config, prefix=""):
     return "\n".join(line for line in lines if line)
 
 def initialize_weight_matrix(param_value, param_name, default_value=0.2):
-    """Helper function to initialize weight matrices for both Wp0 and Wn0"""
+    """Helper function to initialize weight matrices for both Wp0"""
     if param_value == 0:  # New case: If parameter is 0, return zero matrix
         return torch.zeros(6, 6, dtype=torch.float32)
     elif isinstance(param_value, str) and os.path.isfile(param_value):
@@ -216,23 +216,22 @@ def main():
         env_log = os.path.join(log_dir, "env.txt")
         hebbian_log = os.path.join(log_dir, "hebbian.txt")
         env_kwargs["path_to_log"] = env_log
-        hebbian_kwargs[1]["path_to_log"] = hebbian_log
+        hebbian_kwargs[0]["path_to_log"] = hebbian_log
 
     date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
     sim_animation = f'./{log_dir}/sim'
 
     torch.manual_seed(options.get("seed", 1))
-    min_weight = hebbian_kwargs[1]["min_weight"];
-    max_weight = hebbian_kwargs[1]["max_weight"];
+    min_weight = hebbian_kwargs[0]["min_weight"];
+    max_weight = hebbian_kwargs[0]["max_weight"];
 
-    Wp0 = make_weight_matrix(options, "Wp0")
-    Wn0 = make_weight_matrix(options, "Wn0")
+    W0 = make_weight_matrix(options, "W0")
 
     env_kwargs.update({
         'save_frames_to_path': sim_animation,
     })
 
-    spine_kwargs.update({'Wp_Ia': Wp0, 'Wn_Ia': Wn0})
+    spine_kwargs.update({'W_Ia': W0})
 
     # Save configuration for reproducibility
     all_args = {
@@ -283,56 +282,28 @@ def main():
             xs=900, ys=900, T=1, H=80, W=300,
             timestep=env.model.opt.timestep):
         env.add_fig(fig)
-    #for fig in make_hebbian_viz(
-    #        learner=learners[1],
-    #        xs=200, ys=540, T=1, H=65, W=180,
-    #        timestep=env.model.opt.timestep, legend=True, showlabel=False):
-    #    env.add_fig(fig)
     for fig in make_hebbian_viz(
-            learner=learners[1],
+            learner=learners[0],
             xs=20, ys=540, T=1, H=65, W=180,
             timestep=env.model.opt.timestep, legend=False):
         env.add_fig(fig)
-
-    # Weight matrix visualizations
-    #W_Ia_heatmap = viz.HeatmapGeom(
-    #    center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
-    #    size=0.05,
-    #    min_weight=0,
-    #    max_weight=max_weight,
-    #    W=spine.net.Wp_Ia,
-    #    title='excitatory',
-    #)
-    #env.add_geom(W_Ia_heatmap)
-    #W0 = spine.net.Wp_Ia.clone().detach()
-    #diffW_Ia_heatmap = viz.HeatmapGeom(
-    #    center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
-    #    size=0.03,
-    #    W=spine.net.Wp_Ia,
-    #    W0=W0,
-    #    min_weight=0,
-    #    max_weight=max_weight,
-    #    notext=True,
-    #    spacing=2
-    #)
-    #env.add_geom(diffW_Ia_heatmap)
 
     W_Ia_heatmap = viz.HeatmapGeom(
         center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
         size=0.05,
         min_weight=0,
         max_weight=1,
-        W=spine.net.Wp_Ia,
+        W=spine.net.W_Ia,
         xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
         ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
         title='excitatory'
     )
     env.add_geom(W_Ia_heatmap)
-    W0 = spine.net.Wn_Ia.clone().detach()
+    W0 = spine.net.W_Ia.clone().detach()
     diffW_Ia_heatmap = viz.HeatmapGeom(
         center= env_kwargs['lookat'] + np.array([-0.6, -2.1, -5]),
         size=0.03,
-        W=spine.net.Wp_Ia,
+        W=spine.net.W_Ia,
         W0=W0,
         min_weight=0,
         max_weight=1,
@@ -422,17 +393,14 @@ def main():
                 if current_time > 0 and current_time > int(last_write_time):
 
 
-                    wp = spine.net.Wp_Ia.sum() / spine.net.Wp_Ia.numel()
+                    wp = spine.net.W_Ia.sum() / spine.net.W_Ia.numel()
                     avg = movavg1.filter(wp)
                     ddt_avg = 1/(2*np.pi*fc)*(avg - lowpass.filter(avg))
                     criteria = movavg2.filter(ddt_avg)
                     #print(wp, avg, ddt_avg, convergence)
 
-                    _Wn_Ia = ",".join(
-                        map(str, spine.net.Wn_Ia.flatten().tolist())
-                    )
-                    _Wp_Ia = ",".join(
-                        map(str, spine.net.Wp_Ia.flatten().tolist())
+                    _W_Ia = ",".join(
+                        map(str, spine.net.W_Ia.flatten().tolist())
                     )
                     _muscle_strength = muscle_strength
                     with open(f"./{log_dir}/data.txt", "a") as f:
@@ -440,8 +408,7 @@ def main():
                             f"{i+1},"
                             f"{current_time:.2f},"
                             f"{_muscle_strength},"
-                            f"{_Wn_Ia},"
-                            f"{_Wp_Ia}\n"
+                            f"{_W_Ia}\n"
                         )
                     last_write_time = current_time
 
