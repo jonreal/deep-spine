@@ -6,7 +6,6 @@ import pickle
 import numpy as np
 import torch
 import traceback
-import matplotlib.pyplot as plt
 import mujoco
 from scipy import signal
 from pprint import pprint
@@ -284,56 +283,56 @@ def main():
             xs=900, ys=900, T=1, H=80, W=300,
             timestep=env.model.opt.timestep):
         env.add_fig(fig)
+    #for fig in make_hebbian_viz(
+    #        learner=learners[1],
+    #        xs=200, ys=540, T=1, H=65, W=180,
+    #        timestep=env.model.opt.timestep, legend=True, showlabel=False):
+    #    env.add_fig(fig)
     for fig in make_hebbian_viz(
             learner=learners[1],
-            xs=200, ys=540, T=1, H=65, W=180,
-            timestep=env.model.opt.timestep, legend=True, showlabel=False):
-        env.add_fig(fig)
-    for fig in make_hebbian_viz(
-            learner=learners[0],
             xs=20, ys=540, T=1, H=65, W=180,
             timestep=env.model.opt.timestep, legend=False):
         env.add_fig(fig)
 
     # Weight matrix visualizations
-    W_Ia_heatmap = viz.HeatmapGeom(
-        center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
-        size=0.05,
-        min_weight=0,
-        max_weight=max_weight,
-        W=spine.net.Wp_Ia,
-        title='excitatory',
-    )
-    env.add_geom(W_Ia_heatmap)
-    W0 = spine.net.Wp_Ia.clone().detach()
-    diffW_Ia_heatmap = viz.HeatmapGeom(
-        center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
-        size=0.03,
-        W=spine.net.Wp_Ia,
-        W0=W0,
-        min_weight=0,
-        max_weight=max_weight,
-        notext=True,
-        spacing=2
-    )
-    env.add_geom(diffW_Ia_heatmap)
+    #W_Ia_heatmap = viz.HeatmapGeom(
+    #    center= env_kwargs['lookat'] + np.array([-0.9, -0.5, -0.20]),
+    #    size=0.05,
+    #    min_weight=0,
+    #    max_weight=max_weight,
+    #    W=spine.net.Wp_Ia,
+    #    title='excitatory',
+    #)
+    #env.add_geom(W_Ia_heatmap)
+    #W0 = spine.net.Wp_Ia.clone().detach()
+    #diffW_Ia_heatmap = viz.HeatmapGeom(
+    #    center= env_kwargs['lookat'] + np.array([-0.6, -0.1, -5]),
+    #    size=0.03,
+    #    W=spine.net.Wp_Ia,
+    #    W0=W0,
+    #    min_weight=0,
+    #    max_weight=max_weight,
+    #    notext=True,
+    #    spacing=2
+    #)
+    #env.add_geom(diffW_Ia_heatmap)
 
     W_Ia_heatmap = viz.HeatmapGeom(
         center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
         size=0.05,
         min_weight=0,
         max_weight=1,
-        W=spine.net.Wn_Ia,
+        W=spine.net.Wp_Ia,
         xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
         ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
-        title='inhibitory'
+        title='excitatory'
     )
     env.add_geom(W_Ia_heatmap)
     W0 = spine.net.Wn_Ia.clone().detach()
     diffW_Ia_heatmap = viz.HeatmapGeom(
-        center= env_kwargs['lookat'] + np.array([-0.6, -0.5, -5]),
+        center= env_kwargs['lookat'] + np.array([-0.6, -2.1, -5]),
         size=0.03,
-        W=spine.net.Wn_Ia,
+        W=spine.net.Wp_Ia,
         W0=W0,
         min_weight=0,
         max_weight=1,
@@ -343,7 +342,7 @@ def main():
     env.add_geom(diffW_Ia_heatmap)
 
     fig = viz.BarsFigure(
-        viewport=mujoco.MjrRect(380, 0, 150, 100),
+        viewport=mujoco.MjrRect(250, 0, 150, 100),
         nbars=1,
         title='Muscle Strength',
         source=env.muscle_strength,
@@ -359,7 +358,7 @@ def main():
     annotation_text = build_annotation_text(args.custom)
     annotation = viz.Annotation(
         text=annotation_text,
-        viewport=mujoco.MjrRect(390, 90, 200, 200),
+        viewport=mujoco.MjrRect(220, 90, 200, 200),
         gridpos=mujoco.mjtGridPos.mjGRID_BOTTOM
     )
     env.add_annotation(annotation)

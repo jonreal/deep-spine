@@ -19,6 +19,7 @@ function [key_str, val_str] = extract_parameters(path)
     ignore = 'env_kwargs_relative_muscle_scale';
     ig = find(strcmp(leaves(:,1),ignore));
     leaves(ig,:) = [];
+    short_keys(ig) = [];
 
     % Convert values to strings
     value_strs = cellfun(@(v) string(v), leaves(:,2), 'UniformOutput', true);

@@ -101,12 +101,8 @@ class IaReflex(nn.Module):
         #)
 
         # Not clamped
-        synaptic_activation = (
-            torch.matmul(
-                self.Wp_Ia - self.Wn_Ia,
-                act_Ia
-            ) + drive
-        )
+        # removed inhibition
+        synaptic_activation = torch.matmul(self.Wp_Ia, act_Ia) + drive
 
         act_MN = self.MN(synaptic_activation)
         act_muscle = self.muscle(act_MN)

@@ -12,7 +12,7 @@ if doCase == 1
   w66 = w(6,6);
   dw66 = gradient(w66)/dt;
   tq = [40000, 170000];
-  [pks,loc] = findpeaks(dw66, 'MinPeakProminence',5e-4);
+  [pks,loc] = findpeaks(dw66, 'MinPeakProminence',1e-3);
   mask = loc > tq(1) & loc <= tq(end);
   loc = loc(mask);
   pks = pks(mask);
@@ -62,11 +62,11 @@ figure;
 
 
 elseif doCase==3
-% Ia_BE -> MN_EE
+% Ia_BE -> MN_SE
 w46 = w(4,6);
 dw46 = gradient(w46)/dt;
 tq = [415000, 490000];
-[pks,loc] = findpeaks(dw46, 'MinPeakProminence',5e-4);
+[pks,loc] = findpeaks(dw46, 'MinPeakProminence',5e-3);
 mask = loc > tq(1) & loc <= tq(end);
 loc = loc(mask);
 pks = pks(mask);
@@ -92,7 +92,7 @@ elseif doCase == 4
   w24 = w(1,1);
   dw24 = gradient(w24)/dt;
   tq = [37000, 192000];
-  [pks,loc] = findpeaks(dw24, 'MinPeakProminence',5e-4);
+  [pks,loc] = findpeaks(dw24, 'MinPeakProminence',1e-3);
   mask = loc > tq(1) & loc <= tq(end);
   loc = loc(mask);
   pks = pks(mask);
@@ -112,6 +112,32 @@ elseif doCase == 4
     xlabel('step')
     label = 'Ia-SF -> MN-SF';
     sgtitle(label)
+
+elseif doCase == 5
+  % Ia_BF -> MN_SF
+  w = w(1,5);
+  dw = gradient(w)/dt;
+  tq = [200000, 360000];
+  [pks,loc] = findpeaks(dw, 'MinPeakProminence',5e-3);
+  mask = loc > tq(1) & loc <= tq(end);
+  loc = loc(mask);
+  pks = pks(mask);
+  figure;
+    subplot(211);
+    plot(w,'k'); hold all;
+    plot([tq(1),tq(1)],ylim,'--k');
+    plot([tq(end),tq(end)],ylim,'--k');
+    ylabel('weight')
+    subplot(212);
+    plot(dw,'k');
+    hold all;
+    scatter(loc,pks,10,'r');
+    plot([tq(1),tq(1)],ylim,'--k');
+    plot([tq(end),tq(end)],ylim,'--k');
+    ylabel('d/dt')
+    xlabel('step')
+    label = 'Ia-BF -> MN-SF';
+    sgtitle(label)
 end
 
 winSec = 1;
@@ -125,7 +151,7 @@ nq = numel(quiry);
 
 for q=1:nq;
   nsig = size(S.(quiry{q}),2);
-  figure;
+  figure('Position',[1440 818 248 420]);
   sp = 0.001;
   xsp = 0.05;
   ysp = 0.05;
@@ -152,6 +178,7 @@ for q=1:nq;
     axs(n).XAxis.Visible = 'off';
     axs(n).YAxis.Visible = 'off';
     axs(n).Color = 'none';
+    grid on;
 
     if nsig==6
       ann = annotation('textbox','Position',[0,ys-h/2,w,h]);
@@ -159,6 +186,35 @@ for q=1:nq;
       ann.Interpreter = 'none';
       ann.EdgeColor = 'none';
       ann.FontSize = 10;
+    end
+
+    if nsig==2
+      if n==1
+      ann = annotation('textbox','Position',[0,ys-h/2,w,h]);
+      ann.String = 'S';
+      ann.Interpreter = 'none';
+      ann.EdgeColor = 'none';
+      ann.FontSize = 10;
+      end
+      if n==2
+        ann = annotation('textbox','Position',[0,ys-h/2,w,h]);
+        ann.String = 'E';
+        ann.Interpreter = 'none';
+        ann.EdgeColor = 'none';
+        ann.FontSize = 10;
+
+        ann = annotation('textbox','Position',[xs+0.7*w,ys,0.3,h]);
+        ann.String = '\uparrow Flexion';
+        ann.EdgeColor = 'none';
+        ann.VerticalAlignment = 'top';
+        ann.FontSize = 10;
+
+        ann = annotation('textbox','Position',[xs+0.7*w,ys,0.3,h]);
+        ann.String = '\downarrow Extension';
+        ann.EdgeColor = 'none';
+        ann.VerticalAlignment = 'bottom';
+        ann.FontSize = 10;
+      end
     end
  
     if n==1

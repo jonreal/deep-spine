@@ -1,7 +1,7 @@
 {
   "log_dir": "./logs/default",
   "options": {
-    "num_eps": 32,
+    "num_eps": 40,
     "seed": 1,
     "damping": 1,
     "viscosity": 0,
@@ -9,7 +9,7 @@
     "Wn0": 0.0,
     "muscle_increase_factor": 1.1,
     "max_muscle_strength": 1,
-    "epsilon": 1e-5
+    "epsilon": 0
   },
   "env_kwargs": {
     "episode_length": 90,
@@ -20,7 +20,7 @@
     "video_crf": 28,
     "window_width": 1200,
     "window_height": 900,
-    "lookat": [0.45, -0.2, -0.5]
+    "lookat": [0.45, 0, -0.5]
 },
   "spine_kwargs": {
     "decimation_factor": 1,
