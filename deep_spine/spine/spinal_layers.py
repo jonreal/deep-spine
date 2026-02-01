@@ -6,11 +6,6 @@ import torch.nn.functional as F
 import deep_spine.spine.filters.iir as iir
 import deep_spine.spine.filters.fir as fir
 
-#class Neuron(nn.Module):
-#    def __init__(
-#        self,
-#        num_motor_units,
-
 class II(nn.Module):
     def __init__(
         self,
@@ -52,83 +47,17 @@ class Ia(nn.Module):
         )
         return torch.clamp(activity_vector, 0, 1)
 
-class aMN(nn.Module):
+class Neuron(nn.Module):
     def __init__(
         self,
-        num_motor_units,
-        K,
-        k_s=0.1,
-        k_d=1.1,
-        p=1,
-        W_Ia=None,
-        shunt_model='linear',
-        seed=12345
-    ):
-        super().__init__()
-        self.n = num_motor_units
-        self.K = K
-        self.k_s = torch.tensor(k_s)
-        self.k_d = torch.tensor(k_d)
-        self.p = torch.tensor(1)
-        torch.manual_seed(seed)
-        if W_Ia is None:
-            self.W_Ia = nn.Parameter(
-                torch.normal(mean=0.3, std=0.03,  size=(self.n, self.n)),
-                requires_grad=False
-            )
-        else:
-            self.W_Ia = nn.Parameter(
-                W_Ia.clone().detach(),
-                requires_grad=False
-            )
-
-        self.k_filter = (
-            [iir.IirFilt([0, self.K], [1, K-1]) for _ in range(self.n)]
-        )
-
-        shunt_models = {
-            'linear': self.linear_shunt,
-            'log': self.log_shunt,
-            'power': self.power_shunt
-        }
-        self.shunt_model = shunt_models[shunt_model]
-
-        print(self.W_Ia)
-
-
-    @torch.no_grad()
-    def forward(self, act_Ia, descending_drive):
-        synaptic_act = torch.zeros(self.n)
-        for i in range(self.n):
-            for j in range(self.n):
-                synaptic_act[i] += act_Ia[j] * self.W_Ia[i, j]
-        activity = synaptic_act + descending_drive
-        open_channels = torch.abs(activity)
-        a = torch.tensor([
-            self.k_filter[i].filter(
-                activity[i] / self.shunt_model(open_channels[i])
-            ) for i in range(self.n)
-        ])
-        return torch.clip(a, 0, 1)
-
-    def linear_shunt(self, open_channels):
-        return self.k_s + self.k_d * open_channels
-    def log_shunt(self, open_channels):
-        return self.k_s + self.k_d * torch.log(1 + open_channels)
-    def exp_shunt(self, open_channels):
-        return self.k_s + self.k_d * np.exp(open_channels)
-
-class MN(nn.Module):
-    def __init__(
-        self,
-        num_motor_units,
+        n,
         kalman_gain=0,
         static_leak=0.1,
         dynamic_leak=1,
         shunt_model='linear'
     ):
         super().__init__()
-        self.n = num_motor_units
+        self.n = n
         self.shunt = self.set_shunt_model(
             static_leak, dynamic_leak, shunt_model
         )
@@ -153,15 +82,14 @@ class MN(nn.Module):
             raise ValueError(f"Unknown shunt model: {shunt_model}")
 
     @torch.no_grad()
-    def forward(self, synaptic_activation):
-        open_channels = torch.abs(synaptic_activation)
+    def forward(self, synaptic_activation, open_channels):
+        #open_channels = torch.abs(synaptic_activation)
         a = torch.tensor([
             self.synaptic_dynamics[i].filter(
                 synaptic_activation[i] / self.shunt(open_channels[i])
             ) for i in range(self.n)
         ])
         return torch.clip(a, 0, 1)
-
 
 
 class Muscle(nn.Module):

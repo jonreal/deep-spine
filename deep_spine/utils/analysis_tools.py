@@ -12,13 +12,25 @@ import deep_spine.utils.utils as utils
 from plotnine.data import mtcars
 import seaborn as sns
 
+from scipy.io import savemat
+from tbparse import SummaryReader
+
+def log_2_df(logdir):
+    reader = SummaryReader(logdir, pivot=False)
+    df = reader.scalars
+    return df
+
+def df_to_mat_table(df, filename):
+    mat_dict = {col: df[col].to_numpy() for col in df.columns}
+    savemat(filename, {"table": mat_dict})
+
 
 def training_logs_to_dataframe(
         path_list,
         savefile=None
     ):
-    logpath_list = [os.path.abspath(f'{p}/logs') for p in path_list]
-    agentpath_list = [os.path.abspath(f'{p}/models') for p in path_list]
+    logpath_list = [os.path.abspath(f'{p}/tb') for p in path_list]
+    agentpath_list = [os.path.abspath(f'{p}') for p in path_list]
     all_data = []
     for l in logpath_list:
         for f in os.listdir(l):
@@ -57,9 +69,9 @@ def training_logs_to_dataframe(
          if 'eps/' in tag:
              df = insert_max_value_by_tag(df,tag)
              df = insert_2norm_value_by_tag(df,tag)
-             df = insert_checkpoint_values_and_save_performance(
-                df, agentpath_list
-             )
+             #df = insert_checkpoint_values_and_save_performance(
+             #   df, agentpath_list
+             #)
     if savefile:
         df.to_pickle(savefile)
     return df
@@ -91,9 +103,8 @@ def insert_checkpoint_values_and_save_performance(df,agentpath_list):
     for a in os.listdir(path):
       if a.endswith('.pkl'):
         continue
-      zips = utils.get_all_agent_checkpoints(path, a)
+      zips = utils.get_all_agent_checkpoints(os.path.join(path, a, "model"))
       checkpoints = [float(name.split('.')[0]) for name in zips]
-      checkpoints = checkpoints[1:]
       unique_agents = df['ModelID'].unique()
       agentid = next((qid for qid in unique_agents if str(a) in qid), None)
       agent_performance = np.zeros((len(checkpoints),2))
@@ -103,7 +114,10 @@ def insert_checkpoint_values_and_save_performance(df,agentpath_list):
                & (df['Tag'] == 'eps/eps')]
         )
         for i, checkpoint in enumerate(checkpoints):
+          print(i, checkpoint)
           match = agent_df[agent_df['Step'] == int(checkpoint)]
+          print(sorted(agent_df['Step'].unique()[:20]))
+          print(match)
           model = (
               agent_df.loc[agent_df['Step'] == int(checkpoint),'Model'].iloc[0]
           )

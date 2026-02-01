@@ -1,10 +1,7 @@
 {
-  "log_dir": "./logs/interneurons",
+  "log_dir": "./logs/salk-prep",
   "options": {
-    "max_muscle_strength": 0.3
-  },
-  "env_kwargs": {
-    "relative_muscle_scale": [1, 0.5, 0.2, 0.8, 0.5, 0.5]
+    "max_muscle_strength": 0.4
   },
   "supraspine_kwargs": {
     "babble_max_prob": 0.0018

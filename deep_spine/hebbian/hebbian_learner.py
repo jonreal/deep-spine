@@ -26,7 +26,8 @@ class HebbianLearner:
         self.pre_synaptic = pre
         self.post_synaptic = post
 
-        self.n = W.shape[0]
+        self.n_post, self.n_pre = W.shape
+
         self.min_weight = min_weight
         self.max_weight = max_weight
         self.gain = gain
@@ -40,11 +41,11 @@ class HebbianLearner:
             self.logfile = open(path_to_log, 'ab')
 
         self.learning_filter = [
-            [iir.IirFilt([0, Klearn], [1, Klearn-1]) for _ in range(self.n)]
-            for _ in range(self.n)
+            [iir.IirFilt([0, Klearn], [1, Klearn-1]) for _ in range(self.n_pre)]
+            for _ in range(self.n_post)
         ]
         self.mean_filter = (
-            [iir.IirFilt([0, Kmean], [1, Kmean-1]) for _ in range(self.n)]
+            [iir.IirFilt([0, Kmean], [1, Kmean-1]) for _ in range(self.n_post)]
         )
         b, a = signal.butter(
             synaptic_filter['order'],
@@ -52,15 +53,15 @@ class HebbianLearner:
             synaptic_filter['type']
         )
         self.synaptic_filter = (
-            [iir.IirFilt(b, a) for _ in range(self.n)]
+            [iir.IirFilt(b, a) for _ in range(self.n_post)]
         )
-        self.high_pass_post_synaptic = torch.zeros(self.n)
-        self.mean_post_synaptic = torch.zeros(self.n)
-        self.post_dev = torch.zeros(self.n)
-        self.learning_signal = torch.zeros(self.n,self.n)
-        self.compensation = torch.zeros(self.n,self.n)
-        self.rate = torch.zeros(self.n,self.n)
-        self.dW = torch.zeros(self.n,self.n)
+        self.high_pass_post_synaptic = torch.zeros(self.n_post)
+        self.mean_post_synaptic = torch.zeros(self.n_post)
+        self.post_dev = torch.zeros(self.n_post)
+        self.learning_signal = torch.zeros(self.n_post,self.n_pre)
+        self.compensation = torch.zeros(self.n_post,self.n_pre)
+        self.rate = torch.zeros(self.n_post,self.n_pre)
+        self.dW = torch.zeros(self.n_post,self.n_pre)
 
     def set_logfile(self, path_to_log):
         if path_to_log:
@@ -73,7 +74,7 @@ class HebbianLearner:
 
 
         # --- FILTER STAGE (scalar loops) ---
-        for i in range(self.n):
+        for i in range(self.n_post):
             post = self.post_synaptic[i]
             self.high_pass_post_synaptic[i] = self.synaptic_filter[i].filter(post)
             self.mean_post_synaptic[i] = self.mean_filter[i].filter(post)
@@ -84,8 +85,8 @@ class HebbianLearner:
         self.post_dev.copy_(post_dev)
 
         # --- LEARNING SIGNAL STAGE (still needs loop due to per-filter state) ---
-        for i in range(self.n):
-            for j in range(self.n):
+        for i in range(self.n_post):
+            for j in range(self.n_pre):
                 self.learning_signal[i, j] = (
                     self.learning_filter[i][j].filter(
                         self.pre_synaptic[j] * post_dev[i] * self.W[i, j]

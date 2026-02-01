@@ -5,16 +5,12 @@
     "seed": 1,
     "damping": 1,
     "viscosity": 0,
-    "Wp0": 0.2,
-    "Wn0": 0.0,
-    "muscle_increase_factor": 1.1,
-    "max_muscle_strength": 1,
-    "epsilon": 0
+    "total_timesteps": 20000
   },
   "env_kwargs": {
     "episode_length": 90,
     "muscle_strength": 0.1,
-    "relative_muscle_scale": [1, 1, 0.5, 0.5, 0.25, 0.25],
+    "relative_muscle_scale": [1, 1, 0.8, 0.8, 0.5, 0.5],
     "frame_rate": 10,
     "video_scale": 1,
     "video_crf": 28,
@@ -23,6 +19,7 @@
     "lookat": [0.45, 0, -0.5]
 },
   "spine_kwargs": {
+    "type": "IaReflex",
     "decimation_factor": 1,
     "mechanics_filter_cutoff": 0.0,
     "II_length_gain": 1.25,
@@ -61,6 +58,21 @@
             "cutoff": 0.0005,
             "type": "high"
         }
+    }
+  ],
+  "viz_figs":
+  [
+    {
+      "type": "spine_viz",
+      "data": "env.data",
+      "spine": "spine",
+      "supraspine": "supraspine",
+      "xs": 900,
+      "ys": 900,
+      "T": 1,
+      "H": 80,
+      "W": 300,
+      "timestep": "env.model.opt.timestep"
     }
   ]
 }

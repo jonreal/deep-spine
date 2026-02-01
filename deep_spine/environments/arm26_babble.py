@@ -96,6 +96,12 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         )
         #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
 
+    def update_seed(self, seed):
+        self.seed = int(seed)
+        np.random.seed(self.seed)
+        self.ic_rng = np.random.default_rng(self.seed)
+        print(self.seed)
+
 
     def initialize_spine(self, spine):
         spine.initialize(self.model, self.data)
@@ -106,6 +112,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         return spine
 
     def initialize_supraspine(self, supraspine):
+
         supraspine.initialize(self.model, self.data)
         return supraspine
 
@@ -164,8 +171,9 @@ class Arm26Babble(BaseEnvironment, gym.Env):
             self.logfile = None
 
     def _update_figures(self):
-        for fig in self.figs:
-            fig.update()
+        if self.figs:
+            for fig in self.figs:
+                fig.update()
 
     def _write_data_to_logfile(self):
         if self.logfile:

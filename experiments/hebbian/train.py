@@ -13,14 +13,48 @@ from pathlib import Path
 from scipy import signal
 
 # Deep spine imports
-from deep_spine import Arm26Babble, HebbianLearner
+from deep_spine import (
+    Arm26Babble, Arm26Pendulum, LogCallbackArm26Pendulum, HebbianLearner
+)
+
 from deep_spine.spine.ia_reflex import IaReflexSpine
+from deep_spine.spine.ia_interneurons import IaInterneuronSpine
+from deep_spine.spine.identity import IdentitySpine
+
 from deep_spine.spine.filters.fir import FirFilt
 from deep_spine.spine.filters.iir import IirFilt
+
 from deep_spine.supraspine.babble import Babble
+from deep_spine.supraspine.mlp_ppo import MlpPPO
+from deep_spine.supraspine.mlp_sac import MlpSAC
+
+
 from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
+
+
+SPINES = {
+    'ia_reflex': IaReflexSpine,
+    'ia_interneurons': IaInterneuronSpine,
+    'identity': IdentitySpine,
+}
+
+SUPRA = {
+    'babble': Babble,
+    'PPO': MlpPPO,
+    'SAC': MlpSAC,
+}
+
+ENV = {
+    'arm26_babble': Arm26Babble,
+    'arm26_pendulum': Arm26Pendulum,
+}
+
+VIZ_FIGS = {
+    "spine_viz": make_spine_viz
+}
+
 
 
 def recursive_update(d, u, *, strict=False):
@@ -175,16 +209,17 @@ def main():
         description="Run deep spine simulation with default and custom configs."
     )
     parser.add_argument('--config', required=True,
-                        help="Path to default config JSON file.")
+        help="Path to default config JSON file."
+    )
     parser.add_argument('--custom', type=parse_json_or_path, default=None,
-                        help="Path to custom override JSON file (e.g. for options).")
+        help="Path to custom override JSON file (e.g. for options)."
+    )
     parser.add_argument('--log', action='store_true', help="Enable logging.");
     args = parser.parse_args()
 
-    # Load the default configuration
+    # Load the default configuration and custom settings
     with open(args.config, 'r') as f:
         config = json.load(f)
-
     if args.custom:
         changed = recursive_update(config, args.custom)
         if not changed:
@@ -205,12 +240,14 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
 
     # Unpack configuration
-    options = config.get("options", {})
     env_kwargs = config.get("env_kwargs", {})
     spine_kwargs = config.get("spine_kwargs", {})
     supraspine_kwargs = config.get("supraspine_kwargs", {})
     hebbian_kwargs = config.get("hebbian_kwargs", {})
     log_top_dir = config.get("log_top_dir", "./logs/untitled")
+
+    # Train Freq.
+    #supraspine_kwargs["kwargs"]["train_freq"] = (1, "episode")
 
     if args.log:
         env_log = os.path.join(log_dir, "env.txt")
@@ -220,18 +257,16 @@ def main():
 
     date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
     sim_animation = f'./{log_dir}/sim'
-
     torch.manual_seed(options.get("seed", 1))
-    min_weight = hebbian_kwargs[0]["min_weight"];
-    max_weight = hebbian_kwargs[0]["max_weight"];
 
-    W0 = make_weight_matrix(options, "W0")
+
+    #W0 = make_weight_matrix(options, "W0")
 
     env_kwargs.update({
         'save_frames_to_path': sim_animation,
     })
 
-    spine_kwargs.update({'W_Ia': W0})
+    #spine_kwargs.update({'W_Ia': W0})
 
     # Save configuration for reproducibility
     all_args = {
@@ -261,11 +296,25 @@ def main():
             else:
                 f.write(custom_str)
 
-    # Initialize simulation components
-    spine = IaReflexSpine(**spine_kwargs)
-    supraspine = Babble(**supraspine_kwargs)
-    env = Arm26Babble(spine=spine, supraspine=supraspine, **env_kwargs)
+    seed = options.get("seed",1)
 
+    # Initialize simulation components
+    spine_type = spine_kwargs.pop("type")
+    spine = SPINES[spine_type](**spine_kwargs)
+
+    supraspine_type = supraspine_kwargs.pop("type")
+#    supraspine_kwargs["kwargs"]["tensorboard_log"] = (
+#        f'{root_log_dir}/tb/{sim_id}-{spine_type}'
+#    )
+    supraspine = SUPRA[supraspine_type](**supraspine_kwargs)
+    supraspine.update_seed(seed)
+
+    env_type = env_kwargs.pop("type")
+    env = ENV[env_type](spine=spine, supraspine=supraspine, **env_kwargs)
+    env.update_seed(seed)
+    env.reset()
+
+    #Hebbian Learning
     learners = [
         HebbianLearner(
             W=eval(kwargs["W"]),
@@ -275,6 +324,17 @@ def main():
         )
         for kwargs in hebbian_kwargs
     ]
+
+    min_weight = hebbian_kwargs[0]["min_weight"];
+    max_weight = hebbian_kwargs[0]["max_weight"];
+
+    #RESOLVE = {
+    #    "env.data": env.data,
+    #    "env.model.opt.timestep": env.model.opt.timestep
+    #}
+    #for fig_kwargs in viz_figs:
+    #    fig_type = fig_kwargs.pop("type");
+    #    VIZ_FIGS[fig_type](**fig_kwargs)
 
     # Set up visualizations
     for fig in make_spine_viz(
@@ -288,17 +348,19 @@ def main():
             timestep=env.model.opt.timestep, legend=False):
         env.add_fig(fig)
 
-    W_Ia_heatmap = viz.HeatmapGeom(
-        center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
-        size=0.05,
-        min_weight=0,
-        max_weight=1,
-        W=spine.net.W_Ia,
-        xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
-        ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
-        title='excitatory'
-    )
-    env.add_geom(W_Ia_heatmap)
+    if spine_type == 'ia_reflex':
+        W_Ia_heatmap = viz.HeatmapGeom(
+            center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
+            size=0.05,
+            min_weight=0,
+            max_weight=1,
+            W=spine.net.W_Ia,
+            xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
+            ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
+            title='excitatory'
+        )
+        env.add_geom(W_Ia_heatmap)
+
     W0 = spine.net.W_Ia.clone().detach()
     diffW_Ia_heatmap = viz.HeatmapGeom(
         center= env_kwargs['lookat'] + np.array([-0.6, -2.1, -5]),
@@ -341,7 +403,10 @@ def main():
     env.add_annotation(annotation)
 
     # Simulation settings
-    env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
+    #env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
+    env.model.opt.gravity[:] = [9.81, 0.0, 0.0]
+
+
     env.model.opt.viscosity = options.get("viscosity", 0)
     env.model.dof_damping[:] = options.get("damping", 1)
     env.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = True
@@ -353,7 +418,6 @@ def main():
     muscle_increase_factor = options.get("muscle_increase_factor", 1.1)
     max_muscle_strength = options.get("max_muscle_strength", 1.0)
 
-    env.reset()
     steps_per_eps = env.episode_length / env.model.opt.timestep
     last_write_time = 0.0
     tinit = time.time()
@@ -369,74 +433,106 @@ def main():
     b, a = signal.butter(1, fc/(1/2),'low')
     lowpass = IirFilt(b, a)
 
-
-
     try:
-        for i in range(options.get("num_eps", 50)):
-            tstart = time.time()
-            done = False
-            print('---\n')
-            print(
-                f'Eps: {int(env.eps)}, '
-                f'Muscle strength: {muscle_strength:.2f}'
-            )
-            last_write_time = 0
-            while not done:
-                _, _, done, _, _ = env.step(action=None)
-                for learner in learners:
-                    learner.step()
+        if supraspine_type == 'PPO' or supraspine_type == 'SAC':
+            mdir = f'./{log_dir}/model'
+            os.makedirs(mdir, exist_ok=True)
+            check_points = options.get("check_points",1)
+            total_timesteps = options.get("total_timesteps",1000)
+            steps_per_check = int(total_timesteps / check_points)
+            prev_total_steps = 0
+            tb_mov_ave_eps_win = 10
 
-                current_time = int(
-                    env.data.time + 1/env.simulation_sampling_rate
+
+            tensorboard_callback = LogCallbackArm26Pendulum(
+                env=env,
+                window=tb_mov_ave_eps_win
+            )
+
+            for i in range(check_points):
+                tstart = time.time()
+                print(f'{sim_id}: iteration {i+1}/{check_points}:')
+
+                supraspine.model.learn(
+                    total_timesteps=steps_per_check,
+                    reset_num_timesteps=False,
+                    progress_bar=False,
+                    callback=tensorboard_callback
                 )
+                supraspine.model.save(
+                    f'{mdir}/{supraspine.model.num_timesteps}'
+                )
+                tend = time.time()
+                total_steps = supraspine.model.num_timesteps
+                nsteps =  total_steps - prev_total_steps
+                prev_total_steps = total_steps
+                print(f'sim-steps per sec: {nsteps / (tend - tstart):.1f}')
+                print('---\n\n')
 
-                if current_time > 0 and current_time > int(last_write_time):
+        else:
+            for i in range(options.get("num_eps", 50)):
+                tstart = time.time()
+                done = False
+                print('---\n')
+                print(
+                    f'Eps: {int(env.eps)}, '
+                    f'Muscle strength: {muscle_strength:.2f}'
+                )
+                last_write_time = 0
+                while not done:
+                    _, _, done, _, _ = env.step(action=None)
+                    for learner in learners:
+                        learner.step()
 
-
-                    wp = spine.net.W_Ia.sum() / spine.net.W_Ia.numel()
-                    avg = movavg1.filter(wp)
-                    ddt_avg = 1/(2*np.pi*fc)*(avg - lowpass.filter(avg))
-                    criteria = movavg2.filter(ddt_avg)
-                    #print(wp, avg, ddt_avg, convergence)
-
-                    _W_Ia = ",".join(
-                        map(str, spine.net.W_Ia.flatten().tolist())
+                    current_time = int(
+                        env.data.time + 1/env.simulation_sampling_rate
                     )
-                    _muscle_strength = muscle_strength
-                    with open(f"./{log_dir}/data.txt", "a") as f:
-                        f.write(
-                            f"{i+1},"
-                            f"{current_time:.2f},"
-                            f"{_muscle_strength},"
-                            f"{_W_Ia}\n"
+
+                    if current_time > 0 and current_time > int(last_write_time):
+
+
+                        wp = spine.net.W_Ia.sum() / spine.net.W_Ia.numel()
+                        avg = movavg1.filter(wp)
+                        ddt_avg = 1/(2*np.pi*fc)*(avg - lowpass.filter(avg))
+                        criteria = movavg2.filter(ddt_avg)
+                        #print(wp, avg, ddt_avg, convergence)
+
+                        _W_Ia = ",".join(
+                            map(str, spine.net.W_Ia.flatten().tolist())
                         )
-                    last_write_time = current_time
+                        _muscle_strength = muscle_strength
+                        with open(f"./{log_dir}/data.txt", "a") as f:
+                            f.write(
+                                f"{i+1},"
+                                f"{current_time:.2f},"
+                                f"{_muscle_strength},"
+                                f"{_W_Ia}\n"
+                            )
+                        last_write_time = current_time
 
-            tend = time.time()
-            env.reset()
-            muscle_strength = np.clip(
-                muscle_strength * muscle_increase_factor,
-                0, max_muscle_strength
-            )
-            env.set_muscle_strength(muscle_strength)
-            print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
-            print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
-            print(f'convergence criteria (epsilon): {abs(criteria):.6f}'
-                  f' ({options.get("epsilon")})')
-            print('---\n\n')
+                tend = time.time()
+                env.reset()
+                muscle_strength = np.clip(
+                    muscle_strength * muscle_increase_factor,
+                    0, max_muscle_strength
+                )
+                env.set_muscle_strength(muscle_strength)
+                print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
+                print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
+                print(f'convergence criteria (epsilon): {abs(criteria):.6f}'
+                      f' ({options.get("epsilon")})')
+                print('---\n\n')
 
-            if abs(criteria) < options.get("epsilon"):
-                print('\n---\n')
-                print('Simulation converged')
-                print('\n---\n')
-                break;
+                if abs(criteria) < options.get("epsilon"):
+                    print('\n---\n')
+                    print('Simulation converged')
+                    print('\n---\n')
+                    break;
 
-
-
-        print('\n---\n')
-        print(f'Total sim time: {(tend - tinit):.1f} (sec), '
-              f'({(tend - tinit) / 60:.1f} min)')
-        print('\n---\n')
+            print('\n---\n')
+            print(f'Total sim time: {(tend - tinit):.1f} (sec), '
+                  f'({(tend - tinit) / 60:.1f} min)')
+            print('\n---\n')
     except Exception as e:
         tb = traceback.format_exc()
         print(f"Error during simulation: {str(e)}")

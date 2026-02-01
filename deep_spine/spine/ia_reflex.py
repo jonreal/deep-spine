@@ -1,3 +1,4 @@
+import os
 from typing import Callable, Tuple
 from gymnasium import spaces
 import torch
@@ -7,6 +8,29 @@ from functools import partial
 
 from deep_spine.spine.base_spine import BaseSpine
 from deep_spine.spine.spinal_layers import *
+
+def as_numpy(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return np.asarray(x)
+
+def init_weight_matrix(value, shape):
+    """Initialize weights based on the form of `value`."""
+    if value == 0:
+        return torch.zeros(shape, dtype=torch.float32)
+    elif isinstance(value, str) and os.path.isfile(value):
+        data = np.loadtxt(value, delimiter=",")
+        last_row = data[-1]
+        flat_size = np.prod(shape)
+        return torch.tensor(last_row[-flat_size:].reshape(shape), dtype=torch.float32)
+    elif isinstance(value, torch.Tensor):
+        return value.clone().detach()
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        mu, sigma = value
+        return torch.normal(mean=mu, std=sigma, size=shape)
+    else:
+        # default random normal
+        return torch.normal(mean=0.2, std=0.01, size=shape)
 
 class IaReflex(nn.Module):
     def __init__(
@@ -27,16 +51,18 @@ class IaReflex(nn.Module):
         ):
         super().__init__()
         self.n = num_motor_units
+        weights = init_weight_matrix(W_Ia, (self.n, self.n))
+        self.W_Ia = nn.Parameter(weights, requires_grad=False)
 
-        if W_Ia is None:
-            self.W_Ia = nn.Parameter(
-                torch.normal(mean=0.3, std=0.03,  size=(self.n, self.n)),
-                requires_grad=False
-            )
-        else:
-            self.W_Ia = nn.Parameter(
-                W_Ia.clone().detach(),requires_grad=False
-            )
+        #if W_Ia is None:
+        #    self.W_Ia = nn.Parameter(
+        #        torch.normal(mean=0.3, std=0.03,  size=(self.n, self.n)),
+        #        requires_grad=False
+        #    )
+        #else:
+        #    self.W_Ia = nn.Parameter(
+        #        W_Ia.clone().detach(),requires_grad=False
+        #    )
 
         self.II = II(
             self.n,
@@ -49,7 +75,7 @@ class IaReflex(nn.Module):
             saturation_constant=Ia_saturation_constant,
             vel_gain=Ia_velocity_gain
         )
-        self.MN = MN(
+        self.MN = Neuron(
             self.n,
             kalman_gain=kalman_gain,
             static_leak=static_leak,
@@ -92,8 +118,9 @@ class IaReflex(nn.Module):
 
         # Not clamped
         synaptic_activation = torch.matmul(self.W_Ia, act_Ia) + drive
+        open_channels = torch.abs(torch.matmul(self.W_Ia, act_Ia) + drive)
 
-        act_MN = self.MN(synaptic_activation)
+        act_MN = self.MN(synaptic_activation,open_channels)
         act_muscle = self.muscle(act_MN)
 
         return act_II, act_Ia, act_MN, act_muscle
@@ -118,6 +145,9 @@ class IaReflexSpine(BaseSpine):
         self.act_Ia = np.zeros(self.n)
         self.act_MN = np.zeros(self.n)
         self.act_muscle = np.zeros(self.n)
+
+    def sample(self):
+        return as_numpy(self.act_Ia)
 
     def forward(self, data) -> np.ndarray:
         self._sample_mechanics(data)
