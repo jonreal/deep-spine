@@ -34,11 +34,15 @@
 
   <asset>
     <texture
-      type="skybox" builtin="gradient" rgb1="0 0 0" rgb2="0 0 0" width="512" height="512"/>
+      type="skybox" builtin="gradient"
+      rgb1="0 0 0" rgb2="0 0 0" width="512" height="512"/>
 
-    <texture name="texplane" type="2d" builtin="checker" rgb1=".25 .25 .25" rgb2=".3 .3 .3" width="128" height="128" mark="cross" markrgb=".8 .8 .8"/>
+    <texture name="texplane" type="2d"
+      builtin="checker" rgb1=".25 .25 .25" rgb2=".3 .3 .3"
+      width="128" height="128" mark="cross" markrgb=".8 .8 .8"/>
 
-    <material name="matplane" reflectance="0" texture="texplane" texrepeat="1 1" texuniform="true"/>
+    <material name="matplane" reflectance="0"
+      texture="texplane" texrepeat="1 1" texuniform="true"/>
 
   </asset>
 
@@ -48,9 +52,11 @@
   </visual>
 
   <worldbody>
-    <geom name="floor" pos="0 0 -0.5" size="0 0 1" type="plane" material="matplane"/>
+    <geom name="floor" pos="0 0 -0.5" size="0 0 1"
+      type="plane" material="matplane"/>
 
-    <light directional="false" diffuse=".8 .8 .8" specular=".2 .2 .2" pos="0 0 10" dir="0 0 -1" castshadow="false"/>
+    <light directional="false" diffuse=".8 .8 .8"
+      specular=".2 .2 .2" pos="0 0 10" dir="0 0 -1" castshadow="false"/>
 
     <site name="SFo" pos="-0.25 0.02 0" size="0.02"/>
     <site name="SEo" pos="-0.25 -0.02 0" size="0.02"/>
@@ -62,9 +68,15 @@
     <site name="SEx" pos="0 -0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
 
     <body pos="0 0 0">
-      <geom name="upper arm" type="capsule" size="0.025" fromto="0 0 0  0.5 0 0" rgba="0.05 0.05 0.2 1" mass="1"/>
+      <geom name="upper arm"
+        type="capsule" size="0.025" fromto="0 0 0  0.5 0 0"
+        rgba="0.05 0.05 0.2 1" mass="2"/>
+
       <joint name="shoulder" limited="true" range="-120 120"/>
-      <geom name="shoulder" type="cylinder" pos="0 0 0" size=".075 .05" rgba="0 0 0 0.8" mass="0.5" group="1"/>
+
+      <geom name="shoulder"
+        type="cylinder" pos="0 0 0" size=".075 .05"
+        rgba="0 0 0 0.8" mass="0" group="1"/>
 
       <site name="SFi" pos="0.075 -0.01 0" size="0.02"/>
       <site name="SEi" pos="0.075 0.01 0" size="0.02"/>
@@ -73,42 +85,43 @@
       <site name="EFo" pos="0.35 0.03 0" size="0.02"/>
       <site name="EEo" pos="0.35 -0.03 0" size="0.02"/>
 
-      <site name="EFx" pos="0.5 0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
-      <site name="EEx" pos="0.5 -0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
+      <site name="EFx" pos="0.5 0.15 0"
+        size="0.02" rgba="1 .7 0 0.1" group="1"/>
+      <site name="EEx" pos="0.5 -0.15 0"
+        size="0.02" rgba="1 .7 0 0.1" group="1"/>
 
       <body pos="0.5 0 0">
-        <geom name="forearm" type="capsule" size="0.025" fromto="0 0 0  0.5 0 0" rgba="0.05 0.05 0.2 1" mass="1"/>
+
+        <geom name="forearm"
+          type="capsule" size="0.025" fromto="0 0 0  0.5 0 0"
+          rgba="0.05 0.05 0.2 1" mass="1"/>
+
         <joint name="elbow"/>
-        <geom name="elbow" type="cylinder" pos="0 0 0" size=".075 .05" rgba="0 0 0 0.8" mass="0.5" group="1"/>
+
+        <geom name="elbow" type="cylinder" pos="0 0 0"
+          size=".075 .05" rgba="0 0 0 0.8" mass="0" group="1"/>
 
         <site name="EFi" pos="0.075 0.01 0" size="0.02"/>
         <site name="EEi" pos="0.075 -0.01 0" size="0.02"/>
 
         <body pos="0.5 0 0">
-          <geom name="pendulum" type="capsule" size="0.015" fromto="0 0 0  0.35 0 0" rgba=".1 .1 .1 0.5" mass="0.25"/>
+
+          <geom name="pendulum"
+            type="capsule" size="0.015" fromto="0 0 0
+            0.35 0 0" rgba=".1 .1 .1 0.5" mass="0.25"/>
+
           <joint name="wrist" limited="false" damping="0.1"/>
-          <geom name="wrist" type="cylinder" pos="0 0 0" size=".035 .05" rgba="0 0 0 0.9" mass="0.25" group="1"/>
+          <geom name="wrist" type="cylinder"
+            pos="0 0 0" size=".035 .05" rgba="0 0 0 0.9" mass="0" group="1"/>
+
           <body pos="0.35 0 0">
-            <geom name="mass" type="cylinder" pos="0 0 0" size=".025 .05" rgba=".0 .0 .0 1" mass="0.15" group="1"/>
+            <geom name="pendulum-end"
+              type="cylinder" pos="0 0 0" size=".025 .05"
+              rgba=".0 .0 .0 1" mass="0" group="1"/>
           </body>
         </body>
       </body>
     </body>
-
-    <!--
-    <body pos="0 0 0" mocap="true">
-      <geom name="ghost upper arm" type="capsule" size="0.045" fromto="0 0 0  0.5 0 0" rgba=".5 .1 .5 0.1" mass="1" contype="0" conaffinity="0"/>
-      <geom name="ghost shoulder" type="cylinder" pos="0 0 0" size=".1 .05" rgba="1 0 0 0.1" mass="1" group="1" contype="0" conaffinity="0"/>
-    </body>
-
-    <body pos="0.5 0 0" mocap="true">
-      <geom name="ghost forearm" type="capsule" size="0.035" fromto="0 0 0  0.5 0 0" rgba=".5 .1 .5 0.1" mass="0.75" contype="0" conaffinity="0"/>
-      <geom name="ghost elbow" type="cylinder" pos="0 0 0" size=".07 .05" rgba="1 0 0 0.1" mass="0.75" group="1" contype="0" conaffinity="0"/>
-      <body pos="0.5 0 0">
-        <geom name="ghost wrist" type="cylinder" pos="0 0 0" size=".035 .05" rgba="1 0 0 0.1" mass="0.25" group="1" contype="0" conaffinity="0"/>
-      </body>
-    </body>
-    -->
 
   </worldbody>
 
@@ -163,6 +176,11 @@
     <muscle name="EE" tendon="EE"/>
     <muscle name="BF" tendon="BF"/>
     <muscle name="BE" tendon="BE"/>
+
+    <motor name="WMotor"
+      gear="1 0 0" joint="wrist" ctrllimited="true" ctrlrange="-1 1"/>
+
+
     <!--
     <motor name="SMotor" gear="10 0 0" joint="shoulder" ctrllimited="true" ctrlrange="-1 1"/>
     <motor name="EMotor" gear="10 0 0" joint="elbow" ctrllimited="true" ctrlrange="-1 1"/>

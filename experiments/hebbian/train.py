@@ -7,10 +7,7 @@ import numpy as np
 import torch
 import traceback
 import mujoco
-from scipy import signal
-from pprint import pprint
 from pathlib import Path
-from scipy import signal
 
 # Deep spine imports
 from deep_spine import (
@@ -21,17 +18,21 @@ from deep_spine.spine.ia_reflex import IaReflexSpine
 from deep_spine.spine.ia_interneurons import IaInterneuronSpine
 from deep_spine.spine.identity import IdentitySpine
 
-from deep_spine.spine.filters.fir import FirFilt
-from deep_spine.spine.filters.iir import IirFilt
-
 from deep_spine.supraspine.babble import Babble
 from deep_spine.supraspine.mlp_ppo import MlpPPO
 from deep_spine.supraspine.mlp_sac import MlpSAC
 
-
-from deep_spine.hebbian.hebbian_learner import HebbianMonitorFigure
 import deep_spine.utils.viz as viz
-from deep_spine.utils.viz import make_spine_viz, make_hebbian_viz
+from deep_spine.utils.viz import (
+    make_spine_viz, make_pendulum_viz, make_hebbian_viz, make_bars_viz,
+    make_heatmap_geom, build_annotation_text
+)
+from deep_spine.utils.config import (
+    resolve_path, resolve_kwargs, recursive_update,
+    convert_to_serializable, parse_json_or_path
+)
+from deep_spine.utils.logging import Tee
+from deep_spine.utils.monitors import WindowStationarity
 
 
 SPINES = {
@@ -52,159 +53,20 @@ ENV = {
 }
 
 VIZ_FIGS = {
-    "spine_viz": make_spine_viz
+    "spine_viz": make_spine_viz,
+    "pendulum_viz": make_pendulum_viz,
+    "hebbian_viz": make_hebbian_viz,
+    "bars_viz": make_bars_viz,
+}
+
+VIZ_GEOMS = {
+    "heatmap_geom": make_heatmap_geom,
 }
 
 
-
-def recursive_update(d, u, *, strict=False):
-    changed = False
-
-    # Special handling for lists of dictionaries (like hebbian_kwargs)
-    if isinstance(d, list) and isinstance(u, list):
-        # Make sure the lists are of the same length
-        if len(d) != len(u):
-            raise ValueError(f"[config error] Cannot update a list of length {len(d)} with a list of length {len(u)}")
-
-        # Update each dictionary in the list
-        for i in range(len(d)):
-            if isinstance(d[i], dict) and isinstance(u[i], dict):
-                changed |= recursive_update(d[i], u[i], strict=strict)
-            else:
-                if d[i] != u[i]:
-                    d[i] = u[i]
-                    changed = True
-        return changed
-
-    # Original code for dictionaries
-    if isinstance(d, dict) and isinstance(u, dict):
-        for k, v in u.items():
-            if strict and k not in d:
-                raise KeyError(f"[config error] unknown key '{k}' in override")
-            if isinstance(v, dict) and k in d and isinstance(d[k], dict):
-                changed |= recursive_update(d[k], v, strict=strict)
-            elif isinstance(v, list) and k in d and isinstance(d[k], list):
-                # Handle nested lists (like in hebbian_kwargs)
-                changed |= recursive_update(d[k], v, strict=strict)
-            else:
-                if k not in d or d[k] != v:
-                    d[k] = v
-                    changed = True
-        return changed
-
-    # Default case for non-dictionary, non-list values
-    if d != u:
-        d = u
-        changed = True
-
-    return changed
-
-def convert_to_serializable(obj):
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, torch.Tensor):
-        return obj.tolist()
-    elif isinstance(obj, dict):
-        return {k: convert_to_serializable(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_to_serializable(x) for x in obj]
-    else:
-        return obj
-
-def format_value(v):
-    if isinstance(v, (int, float)):
-        return f'{v:.3g}'
-    elif isinstance(v, str):
-        return v[:6]
-    elif isinstance(v, list):
-        return "x".join(format_value(x) for x in v)
-    else:
-        return str(v)
-
-def build_annotation_text(config, prefix=""):
-    if config is None:
-        return ""
-    lines = []
-    # Handle dictionaries
-    if isinstance(config, dict):
-        for k, v in sorted(config.items()):
-            k_prefix = f"{prefix}_{k[:3]}" if prefix else k[:3]
-            if isinstance(v, dict):
-                # Recursive call for nested dictionaries
-                nested_lines = build_annotation_text(v, k_prefix)
-                lines.extend(nested_lines.split("\n"))
-            elif isinstance(v, list):
-                # Handle list values
-                for i, item in enumerate(v):
-                    if isinstance(item, (dict, list)):
-                        # Use index in the prefix for nested structures
-                        item_prefix = f"{k_prefix}_{i}"
-                        nested_lines = build_annotation_text(item, item_prefix)
-                        lines.extend(nested_lines.split("\n"))
-                    else:
-                        # Simple list items
-                        lines.append(f"{k_prefix}[{i}]={format_value(item)}")
-            else:
-                # Simple key-value pairs
-                lines.append(f"{k_prefix}={format_value(v)}")
-    # Handle lists
-    elif isinstance(config, list):
-        for i, item in enumerate(config):
-            if isinstance(item, (dict, list)):
-                # Use index in the prefix for nested structures
-                item_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
-                nested_lines = build_annotation_text(item, item_prefix)
-                lines.extend(nested_lines.split("\n"))
-            else:
-                # Simple list items
-                index_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
-                lines.append(f"{index_prefix}={format_value(item)}")
-    # Handle simple types
-    else:
-        lines.append(f"{prefix}={format_value(config)}")
-    return "\n".join(line for line in lines if line)
-
-def initialize_weight_matrix(param_value, param_name, default_value=0.2):
-    """Helper function to initialize weight matrices for both Wp0"""
-    if param_value == 0:  # New case: If parameter is 0, return zero matrix
-        return torch.zeros(6, 6, dtype=torch.float32)
-    elif isinstance(param_value, str) and os.path.isfile(param_value):
-        # Load from file
-        data = np.loadtxt(param_value, delimiter=',')
-        last_row = data[-1]
-        return torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
-    else:
-        # Generate random values
-        return torch.normal(
-            mean=options.get(param_name, default_value),
-            std=0.01,
-            size=(6, 6)
-        )
-
-def make_weight_matrix(options, key, default_value=0.2):
-    value = options.get(key)
-
-    # Zero case
-    if value == 0:
-        return torch.zeros(6, 6, dtype=torch.float32)
-
-    # File path case
-    if isinstance(value, str) and os.path.isfile(value):
-        data = np.loadtxt(value, delimiter=',')
-        last_row = data[-1]
-        return torch.tensor(last_row[-36:].reshape(6, 6), dtype=torch.float32)
-
-    # Default/random case
-    mean_value = default_value if value is None else value
-    return torch.normal(mean=mean_value, std=0.01, size=(6, 6))
-
-def parse_json_or_path(s):
-    if os.path.isfile(s):
-        with open(s) as f:
-            return json.load(f)
-    return json.loads(s)
-
 def main():
+
+    # Parse args
     parser = argparse.ArgumentParser(
         description="Run deep spine simulation with default and custom configs."
     )
@@ -239,34 +101,35 @@ def main():
     )
     os.makedirs(log_dir, exist_ok=True)
 
+    logf = open(os.path.join(log_dir, "runtime.log"), "a", buffering=1)
+    sys.stdout = Tee(sys.stdout, logf)
+    sys.stderr = Tee(sys.stderr, logf)
+
     # Unpack configuration
     env_kwargs = config.get("env_kwargs", {})
     spine_kwargs = config.get("spine_kwargs", {})
     supraspine_kwargs = config.get("supraspine_kwargs", {})
     hebbian_kwargs = config.get("hebbian_kwargs", {})
-    log_top_dir = config.get("log_top_dir", "./logs/untitled")
-
-    # Train Freq.
-    #supraspine_kwargs["kwargs"]["train_freq"] = (1, "episode")
+    viz_config = config.get("viz", [])
 
     if args.log:
         env_log = os.path.join(log_dir, "env.txt")
-        hebbian_log = os.path.join(log_dir, "hebbian.txt")
         env_kwargs["path_to_log"] = env_log
-        hebbian_kwargs[0]["path_to_log"] = hebbian_log
+        if hebbian_kwargs:
+            hebbian_log = os.path.join(log_dir, "hebbian.txt")
+            hebbian_kwargs[0]["path_to_log"] = hebbian_log
 
     date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
     sim_animation = f'./{log_dir}/sim'
     torch.manual_seed(options.get("seed", 1))
 
-
-    #W0 = make_weight_matrix(options, "W0")
+    print('-----------');
+    print(date_string);
+    print('-----------\n');
 
     env_kwargs.update({
         'save_frames_to_path': sim_animation,
     })
-
-    #spine_kwargs.update({'W_Ia': W0})
 
     # Save configuration for reproducibility
     all_args = {
@@ -303,9 +166,20 @@ def main():
     spine = SPINES[spine_type](**spine_kwargs)
 
     supraspine_type = supraspine_kwargs.pop("type")
-#    supraspine_kwargs["kwargs"]["tensorboard_log"] = (
-#        f'{root_log_dir}/tb/{sim_id}-{spine_type}'
-#    )
+
+    # Auto-generate tensorboard log dir for RL modes
+    if supraspine_type in ('PPO', 'SAC'):
+        supraspine_kwargs.setdefault("kwargs", {})
+        # Build tag from custom, excluding log_dir and options (redundant)
+        custom_for_tag = {k: v for k, v in (args.custom or {}).items()
+                         if k not in ("log_dir", "options")}
+        custom_tag = build_annotation_text(custom_for_tag).replace("\n", "_")
+        tag_str = f"-{custom_tag}" if custom_tag else ""
+        supraspine_kwargs["kwargs"]["tensorboard_log"] = (
+            f'{root_log_dir}/tb/{sim_id}-{spine_type}{tag_str}'
+        )
+        supraspine_kwargs["kwargs"]["seed"] = seed
+
     supraspine = SUPRA[supraspine_type](**supraspine_kwargs)
     supraspine.update_seed(seed)
 
@@ -314,79 +188,36 @@ def main():
     env.update_seed(seed)
     env.reset()
 
-    #Hebbian Learning
-    learners = [
-        HebbianLearner(
-            W=eval(kwargs["W"]),
-            pre=eval(kwargs["pre"]),
-            post=eval(kwargs["post"]),
-            **{k: v for k, v in kwargs.items() if k not in {"W", "pre", "post"}}
-        )
-        for kwargs in hebbian_kwargs
-    ]
+    # Hebbian Learning (optional)
+    learners = []
+    if hebbian_kwargs:
+        resolve = lambda path: resolve_path(path, {"spine": spine})
+        learners = [
+            HebbianLearner(
+                W=resolve(kwargs["W"]),
+                pre=resolve(kwargs["pre"]),
+                post=resolve(kwargs["post"]),
+                **{k: v for k, v in kwargs.items() if k not in {"W", "pre", "post"}}
+            )
+            for kwargs in hebbian_kwargs
+        ]
 
-    min_weight = hebbian_kwargs[0]["min_weight"];
-    max_weight = hebbian_kwargs[0]["max_weight"];
+    # Set up visualizations from config
+    viz_context = {"env": env, "spine": spine,
+                   "supraspine": supraspine, "learners": learners,
+                   "env_kwargs": env_kwargs}
 
-    #RESOLVE = {
-    #    "env.data": env.data,
-    #    "env.model.opt.timestep": env.model.opt.timestep
-    #}
-    #for fig_kwargs in viz_figs:
-    #    fig_type = fig_kwargs.pop("type");
-    #    VIZ_FIGS[fig_type](**fig_kwargs)
+    for item_kwargs in viz_config:
+        item_kwargs = item_kwargs.copy()  # Don't mutate config
+        item_type = item_kwargs.pop("type")
+        resolved = resolve_kwargs(item_kwargs, viz_context)
 
-    # Set up visualizations
-    for fig in make_spine_viz(
-            data=env.data, spine=spine, supraspine=supraspine,
-            xs=900, ys=900, T=1, H=80, W=300,
-            timestep=env.model.opt.timestep):
-        env.add_fig(fig)
-    for fig in make_hebbian_viz(
-            learner=learners[0],
-            xs=20, ys=540, T=1, H=65, W=180,
-            timestep=env.model.opt.timestep, legend=False):
-        env.add_fig(fig)
-
-    if spine_type == 'ia_reflex':
-        W_Ia_heatmap = viz.HeatmapGeom(
-            center= env_kwargs['lookat'] + np.array([-0.9, -1.25, -0.20]),
-            size=0.05,
-            min_weight=0,
-            max_weight=1,
-            W=spine.net.W_Ia,
-            xlabel=['Ia_SF', 'Ia_SE', 'Ia_EF', 'Ia_EE', 'Ia_BF', 'Ia_BE'],
-            ylabel=['MN_SF', 'MN_SE', 'MN_EF', 'MN_EE', 'MN_BF', 'MN_BE'],
-            title='excitatory'
-        )
-        env.add_geom(W_Ia_heatmap)
-
-    W0 = spine.net.W_Ia.clone().detach()
-    diffW_Ia_heatmap = viz.HeatmapGeom(
-        center= env_kwargs['lookat'] + np.array([-0.6, -2.1, -5]),
-        size=0.03,
-        W=spine.net.W_Ia,
-        W0=W0,
-        min_weight=0,
-        max_weight=1,
-        notext=True,
-        spacing=2
-    )
-    env.add_geom(diffW_Ia_heatmap)
-
-    fig = viz.BarsFigure(
-        viewport=mujoco.MjrRect(250, 0, 150, 100),
-        nbars=1,
-        title='Muscle Strength',
-        source=env.muscle_strength,
-        ylim=np.array([-1, 1]),
-        xlim=np.array([0, 1]),
-        gridsize=np.array([5, 2]),
-        ysymmetric=True
-    )
-    fig.figure.flg_selection = 1
-    fig.figure.selection = env.muscle_strength.item()
-    env.add_fig(fig)
+        if item_type in VIZ_FIGS:
+            for fig in VIZ_FIGS[item_type](**resolved):
+                env.add_fig(fig)
+        elif item_type in VIZ_GEOMS:
+            for geom in VIZ_GEOMS[item_type](**resolved):
+                env.add_geom(geom)
 
     annotation_text = build_annotation_text(args.custom)
     annotation = viz.Annotation(
@@ -402,39 +233,21 @@ def main():
     )
     env.add_annotation(annotation)
 
-    # Simulation settings
-    #env.model.opt.gravity[:] = [0.0, 0.0, 0.0]
-    env.model.opt.gravity[:] = [9.81, 0.0, 0.0]
-
-
-    env.model.opt.viscosity = options.get("viscosity", 0)
-    env.model.dof_damping[:] = options.get("damping", 1)
+    # Visuals
     env.opt.flags[mujoco.mjtVisFlag.mjVIS_CONVEXHULL] = True
     env.opt.flags[mujoco.mjtVisFlag.mjVIS_STATIC] = False
     env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTUATOR] = True
     env.opt.flags[mujoco.mjtVisFlag.mjVIS_ACTIVATION] = True
 
+    # strength increases
     muscle_strength = env.muscle_strength[0]
     muscle_increase_factor = options.get("muscle_increase_factor", 1.1)
     max_muscle_strength = options.get("max_muscle_strength", 1.0)
 
-    steps_per_eps = env.episode_length / env.model.opt.timestep
-    last_write_time = 0.0
-    tinit = time.time()
-    print(date_string);
 
-    N1 = env.episode_length/10;
-    movavg1 = FirFilt(np.ones(int(N1))/N1)
-
-    N2 = env.episode_length;
-    movavg2 = FirFilt(np.ones(int(N2))/N2)
-
-    fc = 0.01
-    b, a = signal.butter(1, fc/(1/2),'low')
-    lowpass = IirFilt(b, a)
 
     try:
-        if supraspine_type == 'PPO' or supraspine_type == 'SAC':
+        if supraspine_type in ('PPO', 'SAC'):
             mdir = f'./{log_dir}/model'
             os.makedirs(mdir, exist_ok=True)
             check_points = options.get("check_points",1)
@@ -470,6 +283,17 @@ def main():
                 print('---\n\n')
 
         else:
+
+            steps_per_eps = env.episode_length / env.model.opt.timestep
+            last_write_time = 0.0
+            tinit = time.time()
+
+            convergence_monitor = WindowStationarity(
+                T=int(env.episode_length), M=3,
+                rtol_mu=options.get("epsilon", 1e-4),
+                rtol_sig=options.get("epsilon", 1e-4),
+            )
+
             for i in range(options.get("num_eps", 50)):
                 tstart = time.time()
                 done = False
@@ -490,12 +314,9 @@ def main():
 
                     if current_time > 0 and current_time > int(last_write_time):
 
-
-                        wp = spine.net.W_Ia.sum() / spine.net.W_Ia.numel()
-                        avg = movavg1.filter(wp)
-                        ddt_avg = 1/(2*np.pi*fc)*(avg - lowpass.filter(avg))
-                        criteria = movavg2.filter(ddt_avg)
-                        #print(wp, avg, ddt_avg, convergence)
+                        W = spine.net.W_Ia
+                        wp = (W**2).mean().sqrt().item()
+                        is_converged, info = convergence_monitor.update(wp)
 
                         _W_Ia = ",".join(
                             map(str, spine.net.W_Ia.flatten().tolist())
@@ -509,7 +330,6 @@ def main():
                                 f"{_W_Ia}\n"
                             )
                         last_write_time = current_time
-
                 tend = time.time()
                 env.reset()
                 muscle_strength = np.clip(
@@ -519,11 +339,15 @@ def main():
                 env.set_muscle_strength(muscle_strength)
                 print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
                 print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
-                print(f'convergence criteria (epsilon): {abs(criteria):.6f}'
-                      f' ({options.get("epsilon")})')
+                if info.get('status') == 'window_done':
+                    print(f'convergence: {info["n_windows"]}/{info["M"]} windows, '
+                          f'mu={info["mu"]:.4g}, sig={info["sig"]:.4g}')
+                    if 'mu_span_rel' in info:
+                        print(f'  mu_span={info["mu_span_rel"]:.2e} (tol={info["rtol_mu"]:.2e}), '
+                              f'sig_span={info["sig_span_rel"]:.2e} (tol={info["rtol_sig"]:.2e})')
                 print('---\n\n')
 
-                if abs(criteria) < options.get("epsilon"):
+                if is_converged:
                     print('\n---\n')
                     print('Simulation converged')
                     print('\n---\n')

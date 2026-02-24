@@ -16,6 +16,10 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         task: Optional[str] = '',
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
+        damping = 1,
+        viscosity = 0,
+        gravity = [0, 0, 0],
+        body_mass: np.ndarray = [0, 2, 1, 0],
         muscle_strength: float = 1,
         relative_muscle_scale: np.ndarray = None,
         episode_length: int = 100,
@@ -84,6 +88,38 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
 
+
+        # Mechanics Properties
+        self.model.opt.gravity = gravity;
+        self.model.opt.viscosity = viscosity;
+        self.model.dof_damping[:] = 1
+
+
+        # Scale diag inertias based on mass changes equivalent to scaling
+        # density
+        oldmass = self.model.body_mass
+        oldinertia = self.model.body_inertia
+
+        # s = body_mass / oldmass, but: if oldmass==0 -> leave s at 0 
+        eps = 0.0  # or 1e-12 if you want "near-zero counts as zero"
+
+        s = np.divide(
+            body_mass, oldmass,
+            out=np.zeros_like(body_mass, dtype=float),
+            where=(oldmass != eps)
+        )
+
+        self.model.body_mass = body_mass
+        self.model.body_inertia = s[:, None] * oldinertia
+
+
+        print('Mechanical Properties\n')
+        print('body_mass: ', self.model.body_mass)
+        print('body inertia: \n', self.model.body_inertia)
+        print(f'gravity: {self.model.opt.gravity}')
+        print(f'viscosity: {self.model.opt.viscosity}')
+        print(f'damping: {self.model.dof_damping}\n\n')
+
         # Cache for the tb log file
         self.log_eps = 0
         self.log_eps_reward = 0
@@ -100,7 +136,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.seed = int(seed)
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed)
-        print(self.seed)
+        print(f'Seed: {self.seed}\n\n')
 
 
     def initialize_spine(self, spine):

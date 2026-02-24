@@ -27,7 +27,8 @@ def df_to_mat_table(df, filename):
 
 def training_logs_to_dataframe(
         path_list,
-        savefile=None
+        savefile=None,
+        mat_file=None
     ):
     logpath_list = [os.path.abspath(f'{p}/tb') for p in path_list]
     agentpath_list = [os.path.abspath(f'{p}') for p in path_list]
@@ -74,6 +75,8 @@ def training_logs_to_dataframe(
              #)
     if savefile:
         df.to_pickle(savefile)
+    if mat_file:
+        df_to_mat_table(df, mat_file)
     return df
 
 

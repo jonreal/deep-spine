@@ -1,0 +1,90 @@
+{
+  "log_dir": "./logs/PNAS/one-offs/",
+  "options": {
+    "seed": 1,
+    "check_points": 100,
+    "total_timesteps": 500000
+  },
+  "env_kwargs": {
+    "type": "arm26_pendulum",
+    "damping": 1,
+    "viscosity": 0,
+    "gravity": [9.81, 0.0, 0.0],
+    "body_mass": [0, 2, 1, 0.25, 0],
+    "relative_muscle_scale": [1, 1, 0.8, 0.8, 0.5, 0.5],
+    "pendulum_noise": 0.0,
+    "muscle_strength": 0.8,
+    "frame_rate": 10,
+    "video_scale": 1,
+    "video_crf": 28,
+    "window_width": 1200,
+    "window_height": 900,
+    "lookat": [0.45, 0, -0.1]
+  },
+  "spine_kwargs": {
+    "type": "ia_reflex",
+    "decimation_factor": 1,
+    "mechanics_filter_cutoff": 0.0,
+    "II_length_gain": 1.25,
+    "II_bias": -0.2,
+    "Ia_II_gain": 0.2,
+    "Ia_saturation_constant": 1.25,
+    "Ia_velocity_gain": 10,
+    "muscle_bias": -0.3,
+    "muscle_gain": 2,
+    "kalman_gain": 0.3,
+    "shunt_model": "linear",
+    "static_leak": 0.6,
+    "dynamic_leak": 1,
+    "W_Ia": "logs/exp8/sweep_strength_babble_gain_0/1755753610/data.txt"
+  },
+  "supraspine_kwargs": {
+    "type": "SAC",
+    "decimation_factor": 10,
+    "proprioception_delay_steps": 10,
+    "visual_delay_steps": 20,
+    "action_delay_steps": 10,
+    "kwargs" : {
+      "learning_rate": 0.0005,
+      "buffer_size": 100000,
+      "batch_size": 256,
+      "train_freq":[1,"step"],
+      "tau": 0.005,
+      "gamma": 0.99,
+      "learning_starts": 1000,
+      "gradient_steps": 4,
+      "ent_coef": "auto",
+      "target_update_interval": 1,
+      "use_sde": false,
+      "verbose":0,
+      "device": "cpu",
+      "net_arch": [16, 16]
+    }
+  },
+  "hebbian_kwargs": null,
+  "viz":
+  [
+    {
+      "type": "pendulum_viz",
+      "data": "env.data",
+      "spine": "spine",
+      "supraspine": "supraspine",
+      "xs": 900, "ys": 900, "T": 1, "H": 80, "W": 300,
+      "timestep": "env.model.opt.timestep"
+    },
+    {
+      "type": "heatmap_geom",
+      "W": "spine.net.W_Ia",
+      "lookat": "env_kwargs.lookat",
+      "center_offset": [-0.9, -1.25, -0.20],
+      "size": 0.05,
+      "min_weight": 0,
+      "max_weight": 1,
+      "xlabel": ["Ia_SF", "Ia_SE", "Ia_EF", "Ia_EE", "Ia_BF", "Ia_BE"],
+      "ylabel": ["MN_SF", "MN_SE", "MN_EF", "MN_EE", "MN_BF", "MN_BE"],
+      "title": "Ia -> MN"
+    }
+  ]
+}
+
+

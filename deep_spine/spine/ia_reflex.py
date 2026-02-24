@@ -100,27 +100,10 @@ class IaReflex(nn.Module):
         act_II = self.II(length, activation)
         act_Ia = self.Ia(velocity, act_II, activation)
 
-        #synaptic_activation = drive
-        #for i in range(self.n):
-        #    for j in range(self.n):
-        #        synaptic_activation[i] += (
-        #            act_Ia[j] * torch.clip(self.Wp_Ia[i, j], 0, 1)
-        #            -1 * act_Ia[j] * torch.clip(self.Wn_Ia[i, j], 0, 1)
-        #        )
-
-        # Clamped
-        #synaptic_activation = (
-        #    torch.matmul(
-        #        torch.clip(self.Wp_Ia, 0, 1) - torch.clip(self.Wn_Ia, 0, 1),
-        #        act_Ia
-        #    ) + drive
-        #)
-
-        # Not clamped
         synaptic_activation = torch.matmul(self.W_Ia, act_Ia) + drive
         open_channels = torch.abs(torch.matmul(self.W_Ia, act_Ia) + drive)
 
-        act_MN = self.MN(synaptic_activation,open_channels)
+        act_MN = self.MN(synaptic_activation, open_channels)
         act_muscle = self.muscle(act_MN)
 
         return act_II, act_Ia, act_MN, act_muscle

@@ -22,16 +22,20 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self,
         path_to_log: Optional[str] = None,
         task: Optional[str] = 'balance',
-        reward_type: Optional[str] = 'integral',
+        reward_type: Optional[str] = 'simple',
         max_time = 300,
         min_time = 10,
         q0min = -np.pi/8*np.ones(2,),
         q0max = np.pi/8*np.ones(2,),
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
+        damping = 1,
+        viscosity = 0,
+        gravity = [9.81, 0, 0],
+        body_mass: np.ndarray = [0, 2, 1, 0.25, 0],
+        pendulum_noise = 0,
         muscle_strength: float = 1,
         relative_muscle_scale: np.ndarray = None,
-        episode_length: int = 100,
         seed: Optional[int] = 12345,
         xml_path: str = 'arm26_pendulum.xml',
         frame_rate: Optional[int] = None,
@@ -73,52 +77,91 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.spine = self.initialize_spine(spine)
         self.supraspine = self.initialize_supraspine(supraspine)
 
-        self.episode_length = episode_length
-        self.simulation_steps_per_episode = (
-            self.episode_length * self.simulation_sampling_rate
-        )
-
         self.task = task
         self.reward_type = reward_type
         self.q0min = q0min
         self.q0max = q0max
+        self.pendulum_noise = pendulum_noise;
 
         self.done = False
+        self.terminated = False
+        self.truncated = False
+
         self.eps = 1
         self.reward = 0
-        self.eps_reward = 0
         self.seed = seed
         self.solved = 0
+
+        # IC logging
+        self.current_ic_q0 = 0.0
+        self.current_ic_q1 = 0.0
+        self.log_ic_q0 = 0.0
+        self.log_ic_q1 = 0.0
 
         self.min_time = min_time
         self.max_time = max_time
 
         np.random.seed(self.seed)
-        self.ic_rng = np.random.default_rng(self.seed)
+        self.ic_rng = np.random.default_rng(self.seed + 1)
+        self.noise_rng = np.random.default_rng(self.seed + 2);
 
         if relative_muscle_scale is None:
-            relative_muscle_scale = np.ones(self.model.nu)
+            # There's a motor at the pendulum joint
+            relative_muscle_scale = np.ones(self.model.nu) - 1
+
         self.relative_muscle_scale = relative_muscle_scale
 
         self.default_muscle_strengths = (
-                relative_muscle_scale * self.model.actuator_gainprm[:,3]
+                relative_muscle_scale * self.model.actuator_gainprm[:-1,3]
         )
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
 
         # Cache for the tb log file
         self.log_eps = 0
+        self.ep_reward = 0
         self.log_eps_reward = 0
+
+        # Mechanics Properties
+        self.model.opt.gravity = gravity;
+        self.model.opt.viscosity = viscosity;
+        self.model.dof_damping[:] = 1
+
+
+        # Scale diag inertias based on mass changes equivalent to scaling
+        # density
+        oldmass = self.model.body_mass
+        oldinertia = self.model.body_inertia
+
+        # s = body_mass / oldmass, but: if oldmass==0 -> leave s at 0
+        eps = 0.0  # or 1e-12 if you want "near-zero counts as zero"
+
+        s = np.divide(
+            body_mass, oldmass,
+            out=np.zeros_like(body_mass, dtype=float),
+            where=(oldmass != eps)
+        )
+
+        self.model.body_mass = body_mass
+        self.model.body_inertia = s[:, None] * oldinertia
+
+        print('Mechanical Properties\n')
+        print('body_mass: ', self.model.body_mass)
+        print('body inertia: \n', self.model.body_inertia)
+        print(f'gravity: {self.model.opt.gravity}')
+        print(f'viscosity: {self.model.opt.viscosity}')
+        print(f'damping: {self.model.dof_damping}\n\n')
 
     def update_seed(self, seed):
         self.seed = int(seed)
         np.random.seed(self.seed)
-        self.ic_rng = np.random.default_rng(self.seed)
-        print(self.seed)
+        self.ic_rng = np.random.default_rng(self.seed + 1)
+        self.noise_rng = np.random.default_rng(self.seed + 2);
+        print(f'Seed: {self.seed}\n\n')
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
-        self.model.actuator_gainprm[:,3] = (
+        self.model.actuator_gainprm[:-1,3] = (
             strength * self.default_muscle_strengths
         )
         #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
@@ -140,53 +183,77 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
     def _update_eps_log(self):
         self.log_eps += 1
         self.log_eps_len = self.data.time
-        self.log_eps_reward = self.reward
+        self.log_eps_reward = self.ep_reward
+        self.log_ic_q0 = self.current_ic_q0
+        self.log_ic_q1 = self.current_ic_q1
 
     def _set_initial_conditions(self):
         self.done = False
+        self.terminated = False
+        self.truncated = False
         self.inverted_flag = False
         self.reward = 0
+        self.ep_reward = 0
         self.t0 = 0
         mujoco.mj_resetData(self.model, self.data)
 
-        self.obs = self.supraspine.sample()
-
         if self.task == 'balance':
-            self.data.qpos[0] = self.ic_rng.uniform(self.q0min[0],self.q0max[0])
-            self.data.qpos[1] = self.ic_rng.uniform(self.q0min[1],self.q0max[1])
+            self.data.qpos[0] = (
+                self.ic_rng.uniform(self.q0min[0],self.q0max[0])
+            )
+            self.data.qpos[1] = (
+                self.ic_rng.uniform(self.q0min[1],self.q0max[1])
+            )
             self.data.qpos[2] = np.pi - self.data.qpos[0] - self.data.qpos[1]
         else:
             self.data.qpos[0:3] = np.zeros(3,)
             self.data.qvel = np.zeros(3,)
-            mujoco.mj_forward(self.model, self.data)
-            self.ic = self.data.qpos[0:2]
 
-        self.ic_rng = np.random.default_rng(self.seed + self.eps)
+        # Cache IC for logging
+        self.current_ic_q0 = self.data.qpos[0]
+        self.current_ic_q1 = self.data.qpos[1]
+
+        mujoco.mj_forward(self.model, self.data)
+        self.obs = self.supraspine.sample()
+
         self.simulation_steps = 0
 
     def _update_status(self):
-      if not self.done:
+
+        if self.done:
+            return
+
+        # Entering inverted state
         if (not self.inverted_flag and (self.pendulum_pos >= 3/4*np.pi
                  and self.pendulum_pos <= 5/4*np.pi)
           ):
           self.inverted_flag = True
           self.t0 = self.data.time
+
+        # Check fail or solved
         if self.inverted_flag:
-          out_of_bounds = (self.pendulum_pos < 3/4*np.pi
-                           or self.pendulum_pos > 5/4*np.pi)
-          time_exceeded_while_inverted = (
-              (self.data.time - self.t0) > self.max_time
-          )
-          if out_of_bounds or time_exceeded_while_inverted:
-            self.done = True
-            self.eps += 1
-            if time_exceeded_while_inverted:
-              print('*--Solved--*')
-              self.solved += 1
-        if not self.inverted_flag and self.data.time > self.min_time:
-          self.done = True
-          self.eps += 1
-          self.reward -= 1
+            out_of_bounds = (
+                self.pendulum_pos < 3/4*np.pi or self.pendulum_pos > 5/4*np.pi
+            )
+            time_exceeded_while_inverted = (
+                (self.data.time - self.t0) > self.max_time
+            )
+
+            if out_of_bounds:
+                self.terminated = True
+                self.eps += 1
+            elif time_exceeded_while_inverted:
+                self.truncated = True
+                self.eps += 1
+                self.solved += 1
+                print("*---Solved---*\n")
+        else:
+            if self.data.time > self.min_time:
+                self.terminated = True
+                self.eps += 1
+
+        self.done = self.terminated or self.truncated
+
 
     def _update_reward(self):
 
@@ -208,7 +275,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         #    -np.power(self.pendulum_pos-mu, 2.)/(2*np.power(sig, 2.)))
         #)
         if self.reward_type == 'simple':
-            ftimeint = self.inverted_flag
+            ftimeint = self.inverted_flag - (not self.inverted_flag)
         elif self.reward_type == 'log':
             ftimeint = self.inverted_flag*(np.log(1 + (self.data.time - self.t0)))
         elif self.reward_type == 'integral':
@@ -218,33 +285,47 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
         self.reward += (fgauss + ftimeint)/self.simulation_sampling_rate
 
-    def step(self, action):
-        self.reward = 0
-        #self.spinal_layer.set_descending_drive(self.babble_signal)
-        #drive = self.supraspine.forward(self.data);
-        self.spine.set_descending_drive(
-            self.supraspine.forward(action)
-        )
+    def _update_pendulum_noise(self):
+      self.data.ctrl[-1] = self.noise_rng.normal(0,self.pendulum_noise)
 
+    def set_pendulum_noise_magnitude(self,pendulum_noise):
+      self.pendulum_noise = pendulum_noise
+
+    def step(self, action):
+        self.reward = 0.0
+        self.spine.set_descending_drive(self.supraspine.sample_action())
+        raw_action = self.supraspine.forward(action)
         for steps in range(self.supraspine.decimation_factor):
 
             mujoco.mj_step(self.model, self.data)
+
             self.pendulum_pos = np.sum(self.data.qpos) % (2*np.pi)
             self.pendulum_vel = np.sum(self.data.qvel)
-            self.simulation_steps += 1
 
             self._render()
             self._update_figures()
             self._update_status()
+
+            # Stop mid decimation if needed
+            if self.done:
+                break
+
             self._update_reward()
+            self._update_pendulum_noise()
+
+            self.supraspine.update_perception();
+            self.supraspine.update_action(raw_action);
+
+            self.simulation_steps += 1
+            self.ep_reward += self.reward
+
             #self._write_data_to_logfile()
 
         self.obs = self.supraspine.sample()
 
-        truncated = False
         info = {}
 
-        return self.obs, self.reward, self.done, truncated, info
+        return self.obs, self.reward, self.terminated, self.truncated, info
 
     def reset(self,seed=None,**kwargs):
         super().reset(seed=seed)
@@ -305,22 +386,21 @@ class LogCallbackArm26Pendulum(BaseCallback):
                     f"eps/ep_rew_mean_{self.window}",
                     np.mean(self.ep_rews)
                 )
+            else:
+                self.logger.record(
+                    f"eps/ep_rew_mean_{self.window}",
+                    0
+                )
             self.logger.record("eps/ep_rew", self.env.log_eps_reward)
-            self.logger.record(f"eps/eps",self.env.log_eps)
-            #for i in range(self.env.spinal_layer.n):
-            #    self.logger.record(
-            #        f"eps/b{i+1}_step1",
-            #        self.env.log_babble_step[i][0]
-            #    )
-            #    self.logger.record(
-            #        f"eps/b{i+1}_step2",
-            #        self.env.log_babble_step[i][1]
-            #    )
-            #    self.logger.record(
-            #        f"eps/b{i+1}_amp",
-            #        self.env.log_babble_amp[i]
-            #    )
-            #self.logger.dump(self.num_timesteps)
+            self.logger.record("eps/eps", self.env.log_eps)
+            self.logger.record("eps/solved", self.env.solved)
+            self.logger.record("eps/ic_q0", self.env.log_ic_q0)
+            self.logger.record("eps/ic_q1", self.env.log_ic_q1)
+
+            #reset
+            self.log_eps_reward = 0
+            self.logger.dump(self.num_timesteps)
+
         return True
 
 

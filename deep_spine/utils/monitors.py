@@ -4,6 +4,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from collections import deque
 
 
 class BaseMonitor:
@@ -92,3 +93,47 @@ class WeightMonitor(BaseMonitor):
     def close_video(self):
         self.video_writer.release()
 
+
+class WindowStationarity:
+    """Monitor convergence by tracking stationarity of a signal across windows."""
+
+    def __init__(self, T, M=5, rtol_mu=1e-4, rtol_sig=1e-4):
+        self.T, self.M = int(T), int(M)
+        self.rtol_mu, self.rtol_sig = rtol_mu, rtol_sig
+        self.xbuf = deque(maxlen=self.T)
+        self.mus = deque(maxlen=self.M)
+        self.sigs = deque(maxlen=self.M)
+
+    def update(self, x):
+        self.xbuf.append(float(x))
+
+        # not enough samples for a window yet
+        if len(self.xbuf) < self.T:
+            return False, {"status": "filling", "n_in_window": len(self.xbuf), "T": self.T}
+
+        xw = np.fromiter(self.xbuf, dtype=float)
+        mu = float(xw.mean())
+        sig = float(xw.std(ddof=0))
+
+        # non-overlapping windows (episode-style)
+        self.mus.append(mu)
+        self.sigs.append(sig)
+        self.xbuf.clear()
+
+        info = {"status": "window_done", "mu": mu, "sig": sig,
+                "n_windows": len(self.mus), "M": self.M}
+
+        if len(self.mus) < self.M:
+            return False, info
+
+        mu_ref = max(1e-12, float(np.mean(np.abs(self.mus))))
+        sig_ref = max(1e-12, float(np.mean(self.sigs)))
+
+        mu_span = (max(self.mus) - min(self.mus)) / mu_ref
+        sig_span = (max(self.sigs) - min(self.sigs)) / sig_ref
+
+        converged = (mu_span < self.rtol_mu) and (sig_span < self.rtol_sig)
+        info |= {"mu_span_rel": float(mu_span), "sig_span_rel": float(sig_span),
+                 "rtol_mu": self.rtol_mu, "rtol_sig": self.rtol_sig,
+                 "converged": converged}
+        return converged, info

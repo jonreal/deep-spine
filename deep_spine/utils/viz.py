@@ -353,6 +353,51 @@ def make_spine_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
     figs.append(fig)
     return figs
 
+
+def make_pendulum_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
+    traces = [
+        ('pos', data.qpos, 3, [-0.25, 0.25], True),
+        ('qvel', data.qvel, 3, [-0.5, 0.5], False),
+        ('len', spine.length, spine.n, [0, 1], False),
+        ('vel', spine.velocity, spine.n, [-0.1, 0.1], True),
+        ('force', spine.force_signed, spine.n, [-100, 100], True),
+        ('drive', supraspine.drive, supraspine.n, [0, 1], False),
+        ('act_II', spine.act_II, spine.n, [0, 1], False),
+        ('act_Ia', spine.act_Ia, spine.n, [0, 1], False),
+        ('MN', spine.act_MN, spine.n, [0, 1], False),
+        ('act_MN', spine.act_muscle, spine.n, [0, 1], False),
+        ('act', spine.act, spine.n, [0, 1], False),
+    ]
+    N = int(T / timestep)
+    figs = []
+    for i, (label, source, n, ylim, ysymmetric) in enumerate(traces):
+        figs.append(
+            TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys - (i+1)*H, W, H),
+                ntraces=n,
+                window=N,
+                source=source,
+                ylabel=label,
+                xlim=np.array([0, T]),
+                ylim=ylim,
+                yformat='%.2f',
+                ysymmetric=ysymmetric,
+                gridsize=np.array([2, 3])
+            )
+        )
+    #xlabel
+    fig = TracesFigure(
+        viewport=mujoco.MjrRect(xs, ys-11*H - 20, W, 10),
+        ntraces=0,
+        window=N,
+        xlim=np.array([-T, 0])
+    )
+    fig.figure.yformat = ''
+    fig.figure.flg_ticklabel[0] = 1
+    fig.figure.flg_ticklabel[1] = 1
+    figs.append(fig)
+    return figs
+
 def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
                      showlabel=True):
     traces = [
@@ -440,3 +485,107 @@ def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
 
     return figs
 
+
+def make_bars_viz(source, xs, ys, W, H, title=None, nbars=1,
+                  xlim=None, ylim=None, gridsize=None, ysymmetric=False,
+                  show_selection=False):
+    """Factory for BarsFigure."""
+    xlim = np.array(xlim) if xlim else np.array([0, 1])
+    ylim = np.array(ylim) if ylim else np.array([-1, 1])
+    gridsize = np.array(gridsize) if gridsize else np.array([5, 2])
+
+    fig = BarsFigure(
+        viewport=mujoco.MjrRect(xs, ys, W, H),
+        nbars=nbars,
+        title=title,
+        source=source,
+        xlim=xlim,
+        ylim=ylim,
+        gridsize=gridsize,
+        ysymmetric=ysymmetric
+    )
+    if show_selection:
+        fig.figure.flg_selection = 1
+        fig.figure.selection = source.item()
+    return [fig]
+
+
+def make_heatmap_geom(W, lookat, center_offset, size,
+                      min_weight=-1, max_weight=1,
+                      xlabel=None, ylabel=None, title=None,
+                      notext=False, clone_W0=False, spacing=2.15):
+    """Factory for HeatmapGeom."""
+    center = lookat + np.array(center_offset)
+    W0 = W.clone().detach() if clone_W0 else None
+
+    geom = HeatmapGeom(
+        center=center,
+        size=size,
+        W=W,
+        W0=W0,
+        min_weight=min_weight,
+        max_weight=max_weight,
+        xlabel=xlabel,
+        ylabel=ylabel,
+        title=title,
+        notext=notext,
+        spacing=spacing
+    )
+    return [geom]
+
+
+def format_value(v):
+    """Format a value for annotation display."""
+    if isinstance(v, (int, float)):
+        return f'{v:.3g}'
+    elif isinstance(v, str):
+        return v[:6]
+    elif isinstance(v, list):
+        return "x".join(format_value(x) for x in v)
+    else:
+        return str(v)
+
+
+def build_annotation_text(config, prefix=""):
+    """Build annotation text from a config dict."""
+    if config is None:
+        return ""
+    lines = []
+    # Handle dictionaries
+    if isinstance(config, dict):
+        for k, v in sorted(config.items()):
+            k_prefix = f"{prefix}_{k[:3]}" if prefix else k[:3]
+            if isinstance(v, dict):
+                # Recursive call for nested dictionaries
+                nested_lines = build_annotation_text(v, k_prefix)
+                lines.extend(nested_lines.split("\n"))
+            elif isinstance(v, list):
+                # Handle list values
+                for i, item in enumerate(v):
+                    if isinstance(item, (dict, list)):
+                        # Use index in the prefix for nested structures
+                        item_prefix = f"{k_prefix}_{i}"
+                        nested_lines = build_annotation_text(item, item_prefix)
+                        lines.extend(nested_lines.split("\n"))
+                    else:
+                        # Simple list items
+                        lines.append(f"{k_prefix}[{i}]={format_value(item)}")
+            else:
+                # Simple key-value pairs
+                lines.append(f"{k_prefix}={format_value(v)}")
+    # Handle lists
+    elif isinstance(config, list):
+        for i, item in enumerate(config):
+            if isinstance(item, (dict, list)):
+                # Use index in the prefix for nested structures
+                item_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
+                nested_lines = build_annotation_text(item, item_prefix)
+                lines.extend(nested_lines.split("\n"))
+            else:
+                # Simple list items
+                index_prefix = f"{prefix}[{i}]" if prefix else f"[{i}]"
+                lines.append(f"{index_prefix}={format_value(item)}")
+    # Handle simple types
+    else:
+        lines.append(f"{prefix}={format_value(config)}")
+    return "\n".join(line for line in lines if line)
