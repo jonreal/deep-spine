@@ -23,7 +23,7 @@
     <joint
       type="hinge" pos="0 0 0" axis="0 0 1"
       limited="true" range="-120 120"
-      damping="0.1"
+      damping="0"
     />
     <muscle
       scale="200" ctrllimited="true" ctrlrange="0 1"
@@ -64,8 +64,10 @@
     <site name="BFo" pos="-0.15 0.005 0" size="0.02"/>
     <site name="BEo" pos="-0.15 -0.005 0" size="0.02"/>
 
-    <site name="SFx" pos="0 0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
-    <site name="SEx" pos="0 -0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
+    <site name="SFx"
+      pos="0 0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
+    <site name="SEx"
+      pos="0 -0.15 0" size="0.02" rgba="1 .7 0 0.1" group="1"/>
 
     <body pos="0 0 0">
       <geom name="upper arm"
@@ -108,13 +110,13 @@
 
           <geom name="pendulum"
             type="capsule" size="0.015" fromto="0 0 0
-            0.35 0 0" rgba=".1 .1 .1 0.5" mass="0.25"/>
+            0.5 0 0" rgba=".1 .1 .1 0.5" mass="0.25"/>
 
-          <joint name="wrist" limited="false" damping="0.1"/>
+          <joint name="wrist" limited="false"/>
           <geom name="wrist" type="cylinder"
             pos="0 0 0" size=".035 .05" rgba="0 0 0 0.9" mass="0" group="1"/>
 
-          <body pos="0.35 0 0">
+          <body pos="0.5 0 0">
             <geom name="pendulum-end"
               type="cylinder" pos="0 0 0" size=".025 .05"
               rgba=".0 .0 .0 1" mass="0" group="1"/>
@@ -177,15 +179,12 @@
     <muscle name="BF" tendon="BF"/>
     <muscle name="BE" tendon="BE"/>
 
-    <motor name="WMotor"
-      gear="1 0 0" joint="wrist" ctrllimited="true" ctrlrange="-1 1"/>
-
-
     <!--
     <motor name="SMotor" gear="10 0 0" joint="shoulder" ctrllimited="true" ctrlrange="-1 1"/>
     <motor name="EMotor" gear="10 0 0" joint="elbow" ctrllimited="true" ctrlrange="-1 1"/>
     <motor name="WMotor" gear="10 0 0" joint="wrist" ctrllimited="true" ctrlrange="-1 1"/>
     -->
+
   </actuator>
 
 </mujoco>

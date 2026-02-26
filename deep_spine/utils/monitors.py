@@ -97,9 +97,10 @@ class WeightMonitor(BaseMonitor):
 class WindowStationarity:
     """Monitor convergence by tracking stationarity of a signal across windows."""
 
-    def __init__(self, T, M=5, rtol_mu=1e-4, rtol_sig=1e-4):
+    def __init__(self, T, M=5, rtol_mu=1e-2, atol_sig=1e-3):
         self.T, self.M = int(T), int(M)
-        self.rtol_mu, self.rtol_sig = rtol_mu, rtol_sig
+        self.rtol_mu = rtol_mu
+        self.atol_sig = atol_sig
         self.xbuf = deque(maxlen=self.T)
         self.mus = deque(maxlen=self.M)
         self.sigs = deque(maxlen=self.M)
@@ -127,13 +128,11 @@ class WindowStationarity:
             return False, info
 
         mu_ref = max(1e-12, float(np.mean(np.abs(self.mus))))
-        sig_ref = max(1e-12, float(np.mean(self.sigs)))
-
         mu_span = (max(self.mus) - min(self.mus)) / mu_ref
-        sig_span = (max(self.sigs) - min(self.sigs)) / sig_ref
+        sig_max = float(max(self.sigs))
 
-        converged = (mu_span < self.rtol_mu) and (sig_span < self.rtol_sig)
-        info |= {"mu_span_rel": float(mu_span), "sig_span_rel": float(sig_span),
-                 "rtol_mu": self.rtol_mu, "rtol_sig": self.rtol_sig,
+        converged = (mu_span < self.rtol_mu) and (sig_max < self.atol_sig)
+        info |= {"mu_span_rel": float(mu_span), "sig_max": sig_max,
+                 "rtol_mu": self.rtol_mu, "atol_sig": self.atol_sig,
                  "converged": converged}
         return converged, info

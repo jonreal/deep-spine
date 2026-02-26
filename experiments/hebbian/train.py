@@ -1,8 +1,7 @@
 import argparse
 import json
-import os, shutil, sys
+import os, sys
 import time
-import pickle
 import numpy as np
 import torch
 import traceback
@@ -139,13 +138,8 @@ def main():
         'supraspine_kwargs': supraspine_kwargs,
         'hebbian_kwargs': hebbian_kwargs,
     }
-    with open(os.path.join(log_dir, 'settings.pkl'), 'wb') as f:
-        pickle.dump(all_args, f)
-    with open(os.path.join(log_dir, 'settings.txt'), 'w') as f:
+    with open(os.path.join(log_dir, 'config.json'), 'w') as f:
         json.dump(convert_to_serializable(all_args), f, indent=4)
-
-    # Copy the --config file
-    shutil.copy(args.config, os.path.join(log_dir, 'config.json'))
 
     # Capture the raw --custom string
     if '--custom' in sys.argv:
@@ -288,10 +282,11 @@ def main():
             last_write_time = 0.0
             tinit = time.time()
 
+            min_eps = options.get("min_eps", 30)
             convergence_monitor = WindowStationarity(
                 T=int(env.episode_length), M=3,
-                rtol_mu=options.get("epsilon", 1e-4),
-                rtol_sig=options.get("epsilon", 1e-4),
+                rtol_mu=options.get("epsilon", 1e-2),
+                atol_sig=options.get("atol_sig", 1e-3),
             )
 
             for i in range(options.get("num_eps", 50)):
@@ -344,12 +339,12 @@ def main():
                           f'mu={info["mu"]:.4g}, sig={info["sig"]:.4g}')
                     if 'mu_span_rel' in info:
                         print(f'  mu_span={info["mu_span_rel"]:.2e} (tol={info["rtol_mu"]:.2e}), '
-                              f'sig_span={info["sig_span_rel"]:.2e} (tol={info["rtol_sig"]:.2e})')
+                              f'sig_max={info["sig_max"]:.2e} (tol={info["atol_sig"]:.2e})')
                 print('---\n\n')
 
-                if is_converged:
+                if is_converged and i >= min_eps:
                     print('\n---\n')
-                    print('Simulation converged')
+                    print(f'Simulation converged at episode {i+1}')
                     print('\n---\n')
                     break;
 

@@ -33,7 +33,6 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         viscosity = 0,
         gravity = [9.81, 0, 0],
         body_mass: np.ndarray = [0, 2, 1, 0.25, 0],
-        pendulum_noise = 0,
         muscle_strength: float = 1,
         relative_muscle_scale: np.ndarray = None,
         seed: Optional[int] = 12345,
@@ -81,7 +80,6 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.reward_type = reward_type
         self.q0min = q0min
         self.q0max = q0max
-        self.pendulum_noise = pendulum_noise;
 
         self.done = False
         self.terminated = False
@@ -98,21 +96,25 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.log_ic_q0 = 0.0
         self.log_ic_q1 = 0.0
 
+        # Final condition logging
+        self.log_fc_q0 = 0.0
+        self.log_fc_q1 = 0.0
+        self.log_fc_pend = 0.0
+
         self.min_time = min_time
         self.max_time = max_time
 
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed + 1)
-        self.noise_rng = np.random.default_rng(self.seed + 2);
 
         if relative_muscle_scale is None:
             # There's a motor at the pendulum joint
-            relative_muscle_scale = np.ones(self.model.nu) - 1
+            relative_muscle_scale = self.model.nu
 
         self.relative_muscle_scale = relative_muscle_scale
 
         self.default_muscle_strengths = (
-                relative_muscle_scale * self.model.actuator_gainprm[:-1,3]
+                relative_muscle_scale * self.model.actuator_gainprm[:,3]
         )
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
@@ -125,7 +127,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         # Mechanics Properties
         self.model.opt.gravity = gravity;
         self.model.opt.viscosity = viscosity;
-        self.model.dof_damping[:] = 1
+        self.model.dof_damping[:] = damping
 
 
         # Scale diag inertias based on mass changes equivalent to scaling
@@ -145,23 +147,21 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.model.body_mass = body_mass
         self.model.body_inertia = s[:, None] * oldinertia
 
-        print('Mechanical Properties\n')
-        print('body_mass: ', self.model.body_mass)
-        print('body inertia: \n', self.model.body_inertia)
-        print(f'gravity: {self.model.opt.gravity}')
-        print(f'viscosity: {self.model.opt.viscosity}')
-        print(f'damping: {self.model.dof_damping}\n\n')
+        print('--- Mechanical Properties ---')
+        print(f'  body_mass:  {list(self.model.body_mass)}')
+        print(f'  gravity:    {list(self.model.opt.gravity)}')
+        print(f'  damping:    {list(self.model.dof_damping)}')
+        print(f'  viscosity:  {self.model.opt.viscosity}')
 
     def update_seed(self, seed):
         self.seed = int(seed)
         np.random.seed(self.seed)
         self.ic_rng = np.random.default_rng(self.seed + 1)
-        self.noise_rng = np.random.default_rng(self.seed + 2);
         print(f'Seed: {self.seed}\n\n')
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
-        self.model.actuator_gainprm[:-1,3] = (
+        self.model.actuator_gainprm[:,3] = (
             strength * self.default_muscle_strengths
         )
         #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
@@ -186,6 +186,9 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.log_eps_reward = self.ep_reward
         self.log_ic_q0 = self.current_ic_q0
         self.log_ic_q1 = self.current_ic_q1
+        self.log_fc_q0 = self.data.qpos[0]
+        self.log_fc_q1 = self.data.qpos[1]
+        self.log_fc_pend = np.sum(self.data.qpos) % (2 * np.pi)
 
     def _set_initial_conditions(self):
         self.done = False
@@ -285,11 +288,6 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
         self.reward += (fgauss + ftimeint)/self.simulation_sampling_rate
 
-    def _update_pendulum_noise(self):
-      self.data.ctrl[-1] = self.noise_rng.normal(0,self.pendulum_noise)
-
-    def set_pendulum_noise_magnitude(self,pendulum_noise):
-      self.pendulum_noise = pendulum_noise
 
     def step(self, action):
         self.reward = 0.0
@@ -311,16 +309,15 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
                 break
 
             self._update_reward()
-            self._update_pendulum_noise()
 
             self.supraspine.update_perception();
             self.supraspine.update_action(raw_action);
 
             self.simulation_steps += 1
-            self.ep_reward += self.reward
 
             #self._write_data_to_logfile()
 
+        self.ep_reward += self.reward
         self.obs = self.supraspine.sample()
 
         info = {}
@@ -396,6 +393,9 @@ class LogCallbackArm26Pendulum(BaseCallback):
             self.logger.record("eps/solved", self.env.solved)
             self.logger.record("eps/ic_q0", self.env.log_ic_q0)
             self.logger.record("eps/ic_q1", self.env.log_ic_q1)
+            self.logger.record("eps/fc_q0", self.env.log_fc_q0)
+            self.logger.record("eps/fc_q1", self.env.log_fc_q1)
+            self.logger.record("eps/fc_pend", self.env.log_fc_pend)
 
             #reset
             self.log_eps_reward = 0
