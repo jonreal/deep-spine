@@ -1,10 +1,23 @@
 import types
 import numpy as np
+from scipy import signal
 from deep_spine.supraspine.base_supraspine import BaseSupraspine
 from deep_spine.supraspine.delay import DelayBuffer
+import deep_spine.spine.filters.iir as iir
 import torch
 from stable_baselines3 import SAC
 from gymnasium import spaces
+
+
+def _make_filter(spec, shape):
+    """Build an IirBatch from a filter spec dict, or return None.
+
+    spec: {'order': 1, 'cutoff': 0.1, 'type': 'low'} or None/0/{}
+    """
+    if not spec:
+        return None
+    b, a = signal.butter(spec['order'], spec['cutoff'], spec['type'])
+    return iir.IirBatch(b, a, shape)
 
 
 class MlpSAC(BaseSupraspine):
@@ -16,6 +29,9 @@ class MlpSAC(BaseSupraspine):
         proprioception_delay_steps = 0,
         visual_delay_steps = 0,
         action_delay_steps = 0,
+        proprio_filter = None,
+        visual_filter = None,
+        action_filter = None,
         perception_mode = 'proprio-visual',
         seed= 12345
     ):
@@ -33,17 +49,27 @@ class MlpSAC(BaseSupraspine):
         self.proprio_delay = proprioception_delay_steps;
         self.visual_delay = visual_delay_steps;
         self.action_delay = action_delay_steps;
+        self.proprio_filter_spec = proprio_filter;
+        self.visual_filter_spec = visual_filter;
+        self.action_filter_spec = action_filter;
 
     def update_perception(self):
         if self.perception_mode == 'proprio-visual':
-            self.proprio_buffer.push(self.env.spine.sample())
-        self.visual_buffer.push(np.array(
+            raw = self.env.spine.sample()
+            if self.proprio_filter is not None:
+                raw = self.proprio_filter.filter(raw)
+            self.proprio_buffer.push(raw)
+        visual = np.array(
             [self.env.data.qpos[-1].copy(),
              self.env.data.qvel[-1].copy()
             ])
-        )
+        if self.visual_filter is not None:
+            visual = self.visual_filter.filter(visual)
+        self.visual_buffer.push(visual)
 
     def update_action(self, action):
+        if self.action_filter is not None:
+            action = self.action_filter.filter(np.asarray(action))
         self.action_buffer.push(action)
 
     def sample_action(self):
@@ -91,13 +117,19 @@ class MlpSAC(BaseSupraspine):
             self.proprio_buffer = DelayBuffer(
                 self.proprio_delay, init_value=np.zeros(self.n)
             );
+            self.proprio_filter = _make_filter(
+                self.proprio_filter_spec, (self.n,))
 
         self.visual_buffer = DelayBuffer(
             self.visual_delay, init_value=np.zeros(2)
         );
+        self.visual_filter = _make_filter(self.visual_filter_spec, (2,))
+
         self.action_buffer = DelayBuffer(
             self.action_delay, init_value=np.zeros(self.n)
         );
+        self.action_filter = _make_filter(
+            self.action_filter_spec, (self.n,))
 
         # Extract net_arch from kwargs if provided, else default
         net_arch = self.kwargs.pop("net_arch", [16, 16])

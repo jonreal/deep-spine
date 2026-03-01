@@ -5,7 +5,7 @@ from torch import nn
 import numpy as np
 from functools import partial
 
-from deep_spine.spine.base_spine import BaseSpine
+from deep_spine.spine.base_spine import BaseSpine, init_weight_matrix
 from deep_spine.spine.spinal_layers import *
 
 class IaInterneurons(nn.Module):
@@ -51,11 +51,7 @@ class IaInterneurons(nn.Module):
         ]
 
         for name, shape in weights:
-            W = locals()[name]
-            val = (
-                torch.normal(mean=0.3, std=0.03, size=shape)
-                if W is None else W.clone().detach()
-            )
+            val = init_weight_matrix(locals()[name], shape)
             setattr(self, name, nn.Parameter(val, requires_grad=False))
 
 
@@ -117,46 +113,23 @@ class IaInterneurons(nn.Module):
         act_II = self.II(length, activation)
         act_Ia = self.Ia(velocity, act_II, activation)
 
-        #synaptic_activation = drive
-        #for i in range(self.n):
-        #    for j in range(self.n):
-        #        synaptic_activation[i] += (
-        #            act_Ia[j] * torch.clip(self.Wp_Ia[i, j], 0, 1)
-        #            -1 * act_Ia[j] * torch.clip(self.Wn_Ia[i, j], 0, 1)
-        #        )
+        # Excitatory interneuron synaptic currents (compute once)
+        ee_current  = torch.matmul(self.W_e_e, act_INe)
+        ei_current  = torch.matmul(self.W_e_i, act_INi)
+        eIa_current = torch.matmul(self.W_e_Ia, act_Ia)
 
-        # Clamped
-        #synaptic_activation = (
-        #    torch.matmul(
-        #        torch.clip(self.Wp_Ia, 0, 1) - torch.clip(self.Wn_Ia, 0, 1),
-        #        act_Ia
-        #    ) + drive
-        #)
+        # Net current (signed) vs total conductance (unsigned)
+        synaptic_activation_INe = ee_current - ei_current + eIa_current
+        open_channels_INe       = ee_current + ei_current + eIa_current
 
-        # Excitatory
-        synaptic_activation_INe = (
-            torch.matmul(self.W_e_e, act_INe)
-            - torch.matmul(self.W_e_i, act_INi)
-            + torch.matmul(self.W_e_Ia, act_Ia)
-        )
-        open_channels_INe = (
-            torch.matmul(self.W_e_e, act_INe)
-            + torch.matmul(self.W_e_i, act_INi)
-            + torch.matmul(self.W_e_Ia, act_Ia)
-        )
+        # Inhibitory interneuron synaptic currents (compute once)
+        ii_current  = torch.matmul(self.W_i_i, act_INi)
+        ie_current  = torch.matmul(self.W_i_e, act_INe)
+        iIa_current = torch.matmul(self.W_i_Ia, act_Ia)
 
-        # Inhibitory
-        synaptic_activation_INi = (
-            - torch.matmul(self.W_i_i, act_INi)
-            + torch.matmul(self.W_i_e, act_INe)
-            + torch.matmul(self.W_i_Ia, act_Ia)
-        )
-        open_channels_INi = (
-            + torch.matmul(self.W_i_i, act_INi)
-            + torch.matmul(self.W_i_e, act_INe)
-            + torch.matmul(self.W_i_Ia, act_Ia)
-        )
-
+        # Net current (signed) vs total conductance (unsigned)
+        synaptic_activation_INi = -ii_current + ie_current + iIa_current
+        open_channels_INi       =  ii_current + ie_current + iIa_current
 
         act_INe = self.INe(synaptic_activation_INe, open_channels_INe)
         act_INi = self.INi(synaptic_activation_INi, open_channels_INi)
@@ -164,19 +137,14 @@ class IaInterneurons(nn.Module):
         act_INe = act_INe.to(dtype=self.W_MN_e.dtype)
         act_INi = act_INi.to(dtype=self.W_MN_i.dtype)
 
-        # Motor neuron
-        synaptic_activation_MN = (
-            torch.matmul(self.W_MN_Ia, act_Ia)
-            + torch.matmul(self.W_MN_e, act_INe)
-            - torch.matmul(self.W_MN_i, act_INi)
-            + drive
-        )
-        open_channels_MN = (
-            torch.matmul(self.W_MN_Ia, act_Ia)
-            + torch.matmul(self.W_MN_e, act_INe)
-            + torch.matmul(self.W_MN_i, act_INi)
-            + drive
-        )
+        # Motor neuron synaptic currents (compute once)
+        mn_Ia_current = torch.matmul(self.W_MN_Ia, act_Ia)
+        mn_e_current  = torch.matmul(self.W_MN_e, act_INe)
+        mn_i_current  = torch.matmul(self.W_MN_i, act_INi)
+
+        # Net current (signed) vs total conductance (unsigned)
+        synaptic_activation_MN = mn_Ia_current + mn_e_current - mn_i_current + drive
+        open_channels_MN       = mn_Ia_current + mn_e_current + mn_i_current + drive
 
         act_MN = self.MN(synaptic_activation_MN, open_channels_MN)
         act_muscle = self.muscle(act_MN)
@@ -190,9 +158,10 @@ class IaInterneuronSpine(BaseSpine):
     ):
         base_args = {
             key: ia_interneurons_kwargs.pop(key) for key in [
-                'decimation_factor', 'mechanics_filter_cutoff'
+                'decimation_factor',
             ]
         }
+        ia_interneurons_kwargs.pop('mechanics_filter_cutoff', None)
         super().__init__(**base_args)
         self.type = 'ia_interneurons'
         self.kwargs = ia_interneurons_kwargs

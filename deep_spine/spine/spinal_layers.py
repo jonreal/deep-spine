@@ -61,10 +61,8 @@ class Neuron(nn.Module):
         self.shunt = self.set_shunt_model(
             static_leak, dynamic_leak, shunt_model
         )
-        self.synaptic_dynamics = (
-            [iir.IirFilt(
-                [0, kalman_gain], [1, kalman_gain-1]) for _ in range(self.n)
-            ]
+        self.synaptic_dynamics = iir.IirBatch(
+            [0, kalman_gain], [1, kalman_gain-1], (self.n,)
         )
 
     def set_shunt_model(self, static_leak, dynamic_leak, shunt_model='linear'):
@@ -83,13 +81,9 @@ class Neuron(nn.Module):
 
     @torch.no_grad()
     def forward(self, synaptic_activation, open_channels):
-        #open_channels = torch.abs(synaptic_activation)
-        a = torch.tensor([
-            self.synaptic_dynamics[i].filter(
-                synaptic_activation[i] / self.shunt(open_channels[i])
-            ) for i in range(self.n)
-        ])
-        return torch.clip(a, 0, 1)
+        potential = synaptic_activation / self.shunt(open_channels)
+        a = self.synaptic_dynamics.filter(potential.numpy())
+        return torch.clip(torch.from_numpy(a).float(), 0, 1)
 
 
 class Muscle(nn.Module):

@@ -24,7 +24,7 @@ from deep_spine.supraspine.mlp_sac import MlpSAC
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import (
     make_spine_viz, make_pendulum_viz, make_hebbian_viz, make_bars_viz,
-    make_heatmap_geom, build_annotation_text
+    make_heatmap_geom, build_annotation_text, build_tb_tag
 )
 from deep_spine.utils.config import (
     resolve_path, resolve_kwargs, recursive_update,
@@ -76,7 +76,17 @@ def main():
         help="Path to custom override JSON file (e.g. for options)."
     )
     parser.add_argument('--log', action='store_true', help="Enable logging.");
+    parser.add_argument('--show', action='store_true',
+        help="Enable rendering at 10 fps.")
     args = parser.parse_args()
+
+    # --show injects frame_rate into custom config
+    if args.show:
+        show_override = {"env_kwargs": {"frame_rate": 10}}
+        if args.custom is None:
+            args.custom = show_override
+        else:
+            recursive_update(args.custom, show_override)
 
     # Load the default configuration and custom settings
     with open(args.config, 'r') as f:
@@ -161,17 +171,8 @@ def main():
 
     supraspine_type = supraspine_kwargs.pop("type")
 
-    # Auto-generate tensorboard log dir for RL modes
     if supraspine_type in ('PPO', 'SAC'):
         supraspine_kwargs.setdefault("kwargs", {})
-        # Build tag from custom, excluding log_dir and options (redundant)
-        custom_for_tag = {k: v for k, v in (args.custom or {}).items()
-                         if k not in ("log_dir", "options")}
-        custom_tag = build_annotation_text(custom_for_tag).replace("\n", "_")
-        tag_str = f"-{custom_tag}" if custom_tag else ""
-        supraspine_kwargs["kwargs"]["tensorboard_log"] = (
-            f'{root_log_dir}/tb/{sim_id}-{spine_type}{tag_str}'
-        )
         supraspine_kwargs["kwargs"]["seed"] = seed
 
     supraspine = SUPRA[supraspine_type](**supraspine_kwargs)
@@ -195,6 +196,17 @@ def main():
             )
             for kwargs in hebbian_kwargs
         ]
+    spine.set_learners(learners)
+
+    # Auto-generate tensorboard log dir for RL modes (after set_learners for type tag)
+    if supraspine_type in ('PPO', 'SAC'):
+        custom_for_tag = {k: v for k, v in (args.custom or {}).items()
+                         if k not in ("log_dir", "options")}
+        custom_tag = build_tb_tag(custom_for_tag)
+        tag_str = f"-{custom_tag}" if custom_tag else ""
+        supraspine.model.tensorboard_log = (
+            f'{root_log_dir}/tb/{sim_id}-{spine.type}{tag_str}'
+        )
 
     # Set up visualizations from config
     viz_context = {"env": env, "spine": spine,
@@ -281,13 +293,14 @@ def main():
             steps_per_eps = env.episode_length / env.model.opt.timestep
             last_write_time = 0.0
             tinit = time.time()
+            data_file = open(f'./{log_dir}/data.txt', 'wb')
 
-            min_eps = options.get("min_eps", 30)
-            convergence_monitor = WindowStationarity(
-                T=int(env.episode_length), M=3,
-                rtol_mu=options.get("epsilon", 1e-2),
-                atol_sig=options.get("atol_sig", 1e-3),
-            )
+            #min_eps = options.get("min_eps", 30)
+            #convergence_monitor = WindowStationarity(
+            #    T=int(env.episode_length), M=3,
+            #    rtol_mu=options.get("epsilon", 1e-2),
+            #    atol_sig=options.get("atol_sig", 1e-3),
+            #)
 
             for i in range(options.get("num_eps", 50)):
                 tstart = time.time()
@@ -300,30 +313,29 @@ def main():
                 last_write_time = 0
                 while not done:
                     _, _, done, _, _ = env.step(action=None)
-                    for learner in learners:
-                        learner.step()
 
                     current_time = int(
                         env.data.time + 1/env.simulation_sampling_rate
                     )
 
-                    if current_time > 0 and current_time > int(last_write_time):
+                    if (
+                        current_time > 0
+                        and current_time > int(last_write_time)
+                    ):
 
-                        W = spine.net.W_Ia
-                        wp = (W**2).mean().sqrt().item()
-                        is_converged, info = convergence_monitor.update(wp)
-
-                        _W_Ia = ",".join(
-                            map(str, spine.net.W_Ia.flatten().tolist())
+                        # Convergence signal
+                        all_W = (
+                            torch.cat([l.W.flatten() for l in learners])
                         )
-                        _muscle_strength = muscle_strength
-                        with open(f"./{log_dir}/data.txt", "a") as f:
-                            f.write(
-                                f"{i+1},"
-                                f"{current_time:.2f},"
-                                f"{_muscle_strength},"
-                                f"{_W_Ia}\n"
-                            )
+                        #wp = (all_W**2).mean().sqrt().item()
+                        #is_converged, info = convergence_monitor.update(wp)
+
+                        row = np.concatenate([
+                            np.array([i+1, current_time, muscle_strength],
+                                     dtype=np.float64),
+                            all_W.detach().cpu().numpy().astype(np.float64)
+                        ])
+                        data_file.write(row.tobytes())
                         last_write_time = current_time
                 tend = time.time()
                 env.reset()
@@ -334,19 +346,19 @@ def main():
                 env.set_muscle_strength(muscle_strength)
                 print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
                 print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
-                if info.get('status') == 'window_done':
-                    print(f'convergence: {info["n_windows"]}/{info["M"]} windows, '
-                          f'mu={info["mu"]:.4g}, sig={info["sig"]:.4g}')
-                    if 'mu_span_rel' in info:
-                        print(f'  mu_span={info["mu_span_rel"]:.2e} (tol={info["rtol_mu"]:.2e}), '
-                              f'sig_max={info["sig_max"]:.2e} (tol={info["atol_sig"]:.2e})')
+                #if info.get('status') == 'window_done':
+                #    print(f'convergence: {info["n_windows"]}/{info["M"]} windows, '
+                #          f'mu={info["mu"]:.4g}, sig={info["sig"]:.4g}')
+                #    if 'mu_span_rel' in info:
+                #        print(f'  mu_span={info["mu_span_rel"]:.2e} (tol={info["rtol_mu"]:.2e}), '
+                #              f'sig_max={info["sig_max"]:.2e} (tol={info["atol_sig"]:.2e})')
                 print('---\n\n')
 
-                if is_converged and i >= min_eps:
-                    print('\n---\n')
-                    print(f'Simulation converged at episode {i+1}')
-                    print('\n---\n')
-                    break;
+                #if is_converged and i >= min_eps:
+                #    print('\n---\n')
+                #    print(f'Simulation converged at episode {i+1}')
+                #    print('\n---\n')
+                #    break;
 
             print('\n---\n')
             print(f'Total sim time: {(tend - tinit):.1f} (sec), '
@@ -357,6 +369,8 @@ def main():
         print(f"Error during simulation: {str(e)}")
         print(f"Traceback details:\n{tb}")
     finally:
+        if 'data_file' in dir():
+            data_file.close()
         env.close()
 
 if __name__ == '__main__':

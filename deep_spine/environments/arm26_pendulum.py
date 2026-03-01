@@ -148,9 +148,9 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.model.body_inertia = s[:, None] * oldinertia
 
         print('--- Mechanical Properties ---')
-        print(f'  body_mass:  {list(self.model.body_mass)}')
-        print(f'  gravity:    {list(self.model.opt.gravity)}')
-        print(f'  damping:    {list(self.model.dof_damping)}')
+        print(f'  body_mass:  {self.model.body_mass.tolist()}')
+        print(f'  gravity:    {self.model.opt.gravity.tolist()}')
+        print(f'  damping:    {self.model.dof_damping.tolist()}')
         print(f'  viscosity:  {self.model.opt.viscosity}')
 
     def update_seed(self, seed):

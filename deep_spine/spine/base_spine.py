@@ -1,23 +1,41 @@
 from abc import ABC, abstractmethod
+import os
 import numpy as np
-from scipy import signal
 from gymnasium import spaces
 import sys
-
-import deep_spine.spine.filters.iir as iir
+import torch
 
 def normalize(x, xmin, xmax):
     return  (x - xmin) / (xmax - xmin)
+
+def init_weight_matrix(value, shape):
+    """Initialize weights based on the form of `value`."""
+    if value == 0:
+        return torch.zeros(shape, dtype=torch.float32)
+    elif isinstance(value, str) and os.path.isfile(value):
+        data = np.loadtxt(value, delimiter=",")
+        last_row = data[-1]
+        flat_size = np.prod(shape)
+        return torch.tensor(
+            last_row[-flat_size:].reshape(shape), dtype=torch.float32
+        )
+    elif isinstance(value, torch.Tensor):
+        return value.clone().detach()
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        mu, sigma = value
+        return torch.normal(mean=mu, std=sigma, size=shape)
+    else:
+        # default random normal
+        return torch.normal(mean=0.2, std=0.01, size=shape)
 
 class BaseSpine:
     def __init__(
         self,
         decimation_factor = 1,
-        mechanics_filter_cutoff = None
     ):
         self.decimation_factor = decimation_factor
-        self.mechanics_filter_cutoff = mechanics_filter_cutoff
         self.simulation_frame_count = 1
+        self.learners = []
 
     def initialize(self, model, data) -> None:
         self.n = model.na
@@ -46,37 +64,24 @@ class BaseSpine:
         self.act = np.zeros(self.n) # current activation of muscles
         self.drive = np.zeros(self.n) # descending drive to muscles
 
-        b, a = (
-            signal.butter(1, self.mechanics_filter_cutoff, 'low')
-            if self.mechanics_filter_cutoff else (None, None)
-        )
-        self.mechanics_filters = [iir.IirFilt(b, a) for _ in range(3*self.n)]
+        # precompute sign pattern for force_signed
+        self.force_signs = np.array([(-1.0) ** (i+1) for i in range(self.n)])
 
         self._initialize()
 
     def _sample_mechanics(self, data):
-        for i in range(self.n):
-            self.scaled_length[i] = self.mechanics_filters[i].filter(
-                (data.actuator_length[i] - self.LT[i]) / self.L0[i]
-            )
-            self.scaled_velocity[i] = self.mechanics_filters[i+self.n].filter(
-                data.actuator_velocity[i] / self.L0[i]
-            )
-            self.length[i] = self.mechanics_filters[i].filter(
-                normalize(
-                    self.scaled_length[i],
-                    self.lmin[i],
-                    self.lmax[i]
-                )
-            )
-            self.velocity[i] = self.mechanics_filters[i+self.n].filter(
-                    self.scaled_velocity[i] / self.vmax[i]
-            )
-            self.force[i] = self.mechanics_filters[i+2*self.n].filter(
-                data.actuator_force[i]
-            )
-            self.force_signed[i] = ((-1.0) ** (i+1)) * self.force[i]
-            self.act[i] = data.act[i]
+        self.scaled_length[:] = (data.actuator_length[:self.n] - self.LT) / self.L0
+        self.scaled_velocity[:] = data.actuator_velocity[:self.n] / self.L0
+        self.length[:] = normalize(self.scaled_length, self.lmin, self.lmax)
+        self.velocity[:] = self.scaled_velocity / self.vmax
+        self.force[:] = data.actuator_force[:self.n]
+        self.force_signed[:] = self.force_signs * self.force
+        self.act[:] = data.act[:self.n]
+
+    def set_learners(self, learners):
+        self.learners = learners
+        if learners:
+            self.type = f'{self.type}_heb'
 
     def callback(self, model, data) -> None:
         if (self.simulation_frame_count == self.decimation_factor
@@ -84,6 +89,9 @@ class BaseSpine:
         ):
             # Activate muscles
             data.ctrl[:self.n] = self.forward(data)
+            for learner in self.learners:
+                learner.step()
+
             self.simulation_frame_count = 1
         else:
             self.simulation_frame_count += 1

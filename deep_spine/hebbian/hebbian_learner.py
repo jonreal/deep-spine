@@ -40,21 +40,18 @@ class HebbianLearner:
         if path_to_log:
             self.logfile = open(path_to_log, 'ab')
 
-        self.learning_filter = [
-            [iir.IirFilt([0, Klearn], [1, Klearn-1]) for _ in range(self.n_pre)]
-            for _ in range(self.n_post)
-        ]
-        self.mean_filter = (
-            [iir.IirFilt([0, Kmean], [1, Kmean-1]) for _ in range(self.n_post)]
+        self.learning_filter = iir.IirBatch(
+            [0, Klearn], [1, Klearn-1], (self.n_post, self.n_pre)
+        )
+        self.mean_filter = iir.IirBatch(
+            [0, Kmean], [1, Kmean-1], (self.n_post,)
         )
         b, a = signal.butter(
             synaptic_filter['order'],
             synaptic_filter['cutoff'],
             synaptic_filter['type']
         )
-        self.synaptic_filter = (
-            [iir.IirFilt(b, a) for _ in range(self.n_post)]
-        )
+        self.synaptic_filter = iir.IirBatch(b, a, (self.n_post,))
         self.high_pass_post_synaptic = torch.zeros(self.n_post)
         self.mean_post_synaptic = torch.zeros(self.n_post)
         self.post_dev = torch.zeros(self.n_post)
@@ -73,30 +70,29 @@ class HebbianLearner:
     def step(self):
 
 
-        # --- FILTER STAGE (scalar loops) ---
-        for i in range(self.n_post):
-            post = self.post_synaptic[i]
-            self.high_pass_post_synaptic[i] = self.synaptic_filter[i].filter(post)
-            self.mean_post_synaptic[i] = self.mean_filter[i].filter(post)
+        # --- FILTER STAGE (vectorized) ---
+        post = np.asarray(self.post_synaptic, dtype=np.float64)
+        pre = np.asarray(self.pre_synaptic, dtype=np.float64)
 
-        high_pass = self.high_pass_post_synaptic         # (n,)
-        mean_post = self.mean_post_synaptic              # (n,)
-        post_dev = self.gain * high_pass - mean_post     # (n,)
-        self.post_dev.copy_(post_dev)
+        high_pass = self.synaptic_filter.filter(post)       # (n_post,)
+        mean_post = self.mean_filter.filter(post)           # (n_post,)
 
-        # --- LEARNING SIGNAL STAGE (still needs loop due to per-filter state) ---
-        for i in range(self.n_post):
-            for j in range(self.n_pre):
-                self.learning_signal[i, j] = (
-                    self.learning_filter[i][j].filter(
-                        self.pre_synaptic[j] * post_dev[i] * self.W[i, j]
-                    )
-                )
+        self.high_pass_post_synaptic.copy_(torch.from_numpy(high_pass))
+        self.mean_post_synaptic.copy_(torch.from_numpy(mean_post))
+
+        post_dev = self.gain * high_pass - mean_post        # (n_post,)
+        self.post_dev.copy_(torch.from_numpy(post_dev))
+
+        # --- LEARNING SIGNAL STAGE (vectorized) ---
+        W_np = self.W.numpy()                               # (n_post, n_pre)
+        raw = np.outer(post_dev, pre) * W_np                # (n_post, n_pre)
+        ls = self.learning_filter.filter(raw)               # (n_post, n_pre)
+        self.learning_signal.copy_(torch.from_numpy(ls))
 
         # --- VECTORIZED WEIGHT UPDATE ---
         signal = self.learning_signal                    # (n, n)
         comp = torch.where(signal >= 0, 1 - self.W, self.W)
-        rate = (mean_post ** 4) * self.learning_rate     # (n,)
+        rate = (self.mean_post_synaptic ** 4) * self.learning_rate  # (n,)
         rate = rate.view(-1, 1)                          # (n, 1) for broadcast
 
         dW = comp * signal * rate                        # (n, n)

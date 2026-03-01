@@ -83,9 +83,10 @@ class IdentitySpine(BaseSpine):
     ):
         base_args = {
             key: identity_kwargs.pop(key) for key in [
-                'decimation_factor', 'mechanics_filter_cutoff'
+                'decimation_factor',
             ]
         }
+        identity_kwargs.pop('mechanics_filter_cutoff', None)
         super().__init__(**base_args)
         self.type = 'identity'
         self.kwargs = identity_kwargs

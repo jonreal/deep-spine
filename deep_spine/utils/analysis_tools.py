@@ -1,4 +1,4 @@
-import sys, os, pickle
+import sys, os, pickle, time
 import numpy as np
 import torch
 import pandas as pd
@@ -14,6 +14,7 @@ import seaborn as sns
 
 from scipy.io import savemat
 from tbparse import SummaryReader
+import h5py
 
 def log_2_df(logdir):
     reader = SummaryReader(logdir, pivot=False)
@@ -21,18 +22,27 @@ def log_2_df(logdir):
     return df
 
 def df_to_mat_table(df, filename):
-    mat_dict = {col: df[col].to_numpy() for col in df.columns}
-    savemat(filename, {"table": mat_dict})
+    with h5py.File(filename, 'w') as f:
+        grp = f.create_group('table')
+        for col in df.columns:
+            arr = df[col].to_numpy()
+            if arr.dtype.kind in ('U', 'S', 'O'):
+                dt = h5py.string_dtype()
+                grp.create_dataset(col, data=arr.astype(object), dtype=dt)
+            else:
+                grp.create_dataset(col, data=arr)
 
 
 def training_logs_to_dataframe(
         path_list,
         savefile=None,
-        mat_file=None
+        h5_file=None
     ):
     logpath_list = [os.path.abspath(f'{p}/tb') for p in path_list]
     agentpath_list = [os.path.abspath(f'{p}') for p in path_list]
     all_data = []
+    t_read = time.time()
+    n_events = 0
     for l in logpath_list:
         for f in os.listdir(l):
             subdir_path = os.path.join(l, f)
@@ -48,6 +58,7 @@ def training_logs_to_dataframe(
                     for event in events:
                         event_acc = EventAccumulator(event)
                         event_acc.Reload()
+                        n_events += 1
                         if 'scalars' in event_acc.Tags():
                             scalar_tags = event_acc.Tags()['scalars']
                             for tag in scalar_tags:
@@ -64,19 +75,18 @@ def training_logs_to_dataframe(
                                 df['Model'] = '-'.join(model[1:])
                                 all_data.append(df)
 
+    print(f'[{time.time()-t_read:.2f}s] read {n_events} event files -> {len(all_data)} dfs')
+    t0 = time.time()
     df = pd.concat(all_data, ignore_index=True)
-    tags = df['Tag'].unique()
-    for tag in tags:
-         if 'eps/' in tag:
-             df = insert_max_value_by_tag(df,tag)
-             df = insert_2norm_value_by_tag(df,tag)
-             #df = insert_checkpoint_values_and_save_performance(
-             #   df, agentpath_list
-             #)
+    print(f'[{time.time()-t0:.2f}s] concat ({len(df)} rows)')
     if savefile:
+        t1 = time.time()
         df.to_pickle(savefile)
-    if mat_file:
-        df_to_mat_table(df, mat_file)
+        print(f'[{time.time()-t1:.2f}s] to_pickle')
+    if h5_file:
+        t1 = time.time()
+        df_to_mat_table(df, h5_file)
+        print(f'[{time.time()-t1:.2f}s] save h5')
     return df
 
 

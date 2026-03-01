@@ -35,7 +35,8 @@ class HeatmapGeom:
         self.size = size
         self.center = center
         self.W = W
-        self.n = W.shape[0]
+        self.nrows = W.shape[0]
+        self.ncols = W.shape[1]
         self.min_weight = min_weight
         self.max_weight = max_weight
         self.xlabel = xlabel
@@ -48,8 +49,8 @@ class HeatmapGeom:
 
     def draw(self, scene):
 
-        for i in range(self.n):
-            for j in range(self.n):
+        for i in range(self.nrows):
+            for j in range(self.ncols):
                 if self.W0 is not None:
                     current_w = self.W[i][j]
                     initial_w = self.W0[i][j]
@@ -188,7 +189,12 @@ class HeatmapGeom:
                     scene.geoms[scene.ngeom].label = f"{self.ylabel[i]}"
                     scene.ngeom += 1
         if self.title is not None:
-            tx_center = self.center + np.array([0.65, 0.19, 0])
+            step = self.spacing * self.size
+            tx_center = self.center + np.array([
+                self.nrows * step + step,
+                (self.ncols - 1) * step / 2 - step,
+                0
+            ])
             mujoco.mjv_initGeom(
                 scene.geoms[scene.ngeom],
                 type=mujoco.mjtGeom.mjGEOM_LABEL,
@@ -532,6 +538,29 @@ def make_heatmap_geom(W, lookat, center_offset, size,
         spacing=spacing
     )
     return [geom]
+
+
+def build_tb_tag(config):
+    """Build a short tag for TensorBoard directory names.
+    Extracts only leaf key=value pairs, no hierarchy prefix."""
+    if config is None:
+        return ""
+    leaves = []
+    _collect_leaves(config, leaves)
+    return "_".join(format_value(v) for _, v in leaves)
+
+def _collect_leaves(obj, leaves):
+    """Recursively collect (leaf_key, value) pairs from nested dicts/lists."""
+    if isinstance(obj, dict):
+        for k, v in sorted(obj.items()):
+            if isinstance(v, (dict, list)):
+                _collect_leaves(v, leaves)
+            else:
+                leaves.append((k, v))
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _collect_leaves(item, leaves)
 
 
 def format_value(v):
