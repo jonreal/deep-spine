@@ -147,11 +147,33 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.model.body_mass = body_mass
         self.model.body_inertia = s[:, None] * oldinertia
 
+        mujoco.mj_forward(self.model, self.data)
         print('--- Mechanical Properties ---')
         print(f'  body_mass:  {self.model.body_mass.tolist()}')
         print(f'  gravity:    {self.model.opt.gravity.tolist()}')
         print(f'  damping:    {self.model.dof_damping.tolist()}')
         print(f'  viscosity:  {self.model.opt.viscosity}')
+        joint_names = [
+            mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, j)
+            for j in range(self.model.nv)
+        ]
+        col_w = max(len(n) for n in joint_names) + 2
+        header = '            ' + ''.join(n.rjust(col_w) for n in joint_names)
+        moment = np.zeros((self.model.nu, self.model.nv))
+        for i in range(self.model.nu):
+            nnz = self.data.moment_rownnz[i]
+            adr = self.data.moment_rowadr[i]
+            cols = self.data.moment_colind[adr:adr+nnz]
+            moment[i, cols] = self.data.actuator_moment[adr:adr+nnz]
+        print(f'  moment_arms (q=0):')
+        print(header)
+        for i in range(self.model.nu):
+            name = mujoco.mj_id2name(
+                self.model, mujoco.mjtObj.mjOBJ_ACTUATOR, i
+            )
+            vals = np.round(moment[i], 6)
+            row = ''.join(f'{v:>{col_w}.4f}' for v in vals)
+            print(f'    {name:>6s}  {row}')
 
     def update_seed(self, seed):
         self.seed = int(seed)
@@ -291,8 +313,14 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
     def step(self, action):
         self.reward = 0.0
+
+        # Apply most recent action from supraspine
         self.spine.set_descending_drive(self.supraspine.sample_action())
-        raw_action = self.supraspine.forward(action)
+
+        # Update action
+        self.supraspine.set_action(action)
+
+        # Step physics forward decimated number of loops
         for steps in range(self.supraspine.decimation_factor):
 
             mujoco.mj_step(self.model, self.data)
@@ -310,8 +338,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
             self._update_reward()
 
-            self.supraspine.update_perception();
-            self.supraspine.update_action(raw_action);
+            self.supraspine.update()
 
             self.simulation_steps += 1
 

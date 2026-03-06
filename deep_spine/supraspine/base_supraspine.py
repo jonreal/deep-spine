@@ -19,7 +19,7 @@ class BaseSupraspine(ABC):
     def _initialize(self) -> None:
         raise NotImplementedError("missing '_initialize' method")
 
-    @abstractmethod
-    def forward(self, data) -> None:
-        raise NotImplementedError("missing 'forward' method")
+#    @abstractmethod
+#    def forward(self, data) -> None:
+#        raise NotImplementedError("missing 'forward' method")
 

@@ -322,7 +322,7 @@ def make_spine_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
         ('len', spine.length, spine.n, [0, 1], False),
         ('vel', spine.velocity, spine.n, [-0.1, 0.1], True),
         ('force', spine.force_signed, spine.n, [-100, 100], True),
-        ('drive', supraspine.drive, supraspine.n, [0, 1], False),
+        ('drive', spine.drive, spine.n, [0, 1], False),
         ('act_II', spine.act_II, spine.n, [0, 1], False),
         ('act_Ia', spine.act_Ia, spine.n, [0, 1], False),
         ('MN', spine.act_MN, spine.n, [0, 1], False),
@@ -367,7 +367,7 @@ def make_pendulum_viz(data, spine, supraspine, xs, ys, H, W, T, timestep):
         ('len', spine.length, spine.n, [0, 1], False),
         ('vel', spine.velocity, spine.n, [-0.1, 0.1], True),
         ('force', spine.force_signed, spine.n, [-100, 100], True),
-        ('drive', supraspine.drive, supraspine.n, [0, 1], False),
+        ('drive', spine.drive, spine.n, [0, 1], False),
         ('act_II', spine.act_II, spine.n, [0, 1], False),
         ('act_Ia', spine.act_Ia, spine.n, [0, 1], False),
         ('MN', spine.act_MN, spine.n, [0, 1], False),
@@ -489,6 +489,45 @@ def make_hebbian_viz(learner, xs, ys, H, W, T, timestep, legend=False,
         figs[-2].figure.flg_extend = 0
     #figs[1].figure.flg_extend = 0
 
+    return figs
+
+
+def make_supraspine_viz(supraspine, xs, ys, H, W, T, timestep):
+    n = supraspine.n
+    traces = [
+        ('act', supraspine.action, n, [0, 1], False),
+        ('pro', supraspine.proprio, n, [0, 1], False),
+        ('pos', supraspine.visual_centered[0:1], 1, [-np.pi, np.pi], True),
+        ('vel', supraspine.visual_centered[1:2], 1, [-5*np.pi, 5*np.pi], True),
+    ]
+    N = int(T / timestep)
+    figs = []
+    for i, (label, source, ntraces, ylim, ysymmetric) in enumerate(traces):
+        figs.append(
+            TracesFigure(
+                viewport=mujoco.MjrRect(xs, ys - (i+1)*H, W, H),
+                ntraces=ntraces,
+                window=N,
+                source=source,
+                ylabel=label,
+                xlim=np.array([0, T]),
+                ylim=ylim,
+                yformat='%.2f',
+                ysymmetric=ysymmetric,
+                gridsize=np.array([2, 3])
+            )
+        )
+    # xlabel
+    fig = TracesFigure(
+        viewport=mujoco.MjrRect(xs, ys - (len(traces)+1)*H - 20, W, 10),
+        ntraces=0,
+        window=N,
+        xlim=np.array([-T, 0])
+    )
+    fig.figure.yformat = ''
+    fig.figure.flg_ticklabel[0] = 1
+    fig.figure.flg_ticklabel[1] = 1
+    figs.append(fig)
     return figs
 
 

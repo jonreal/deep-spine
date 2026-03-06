@@ -24,7 +24,7 @@ from deep_spine.supraspine.mlp_sac import MlpSAC
 import deep_spine.utils.viz as viz
 from deep_spine.utils.viz import (
     make_spine_viz, make_pendulum_viz, make_hebbian_viz, make_bars_viz,
-    make_heatmap_geom, build_annotation_text, build_tb_tag
+    make_supraspine_viz, make_heatmap_geom, build_annotation_text, build_tb_tag
 )
 from deep_spine.utils.config import (
     resolve_path, resolve_kwargs, recursive_update,
@@ -56,6 +56,7 @@ VIZ_FIGS = {
     "pendulum_viz": make_pendulum_viz,
     "hebbian_viz": make_hebbian_viz,
     "bars_viz": make_bars_viz,
+    "supraspine_viz": make_supraspine_viz,
 }
 
 VIZ_GEOMS = {

@@ -26,7 +26,7 @@ class MlpSAC(BaseSupraspine):
         self,
         kwargs = None,
         decimation_factor: int = 1,
-        proprioception_delay_steps = 0,
+        proprio_delay_steps = 0,
         visual_delay_steps = 0,
         action_delay_steps = 0,
         proprio_filter = None,
@@ -46,51 +46,66 @@ class MlpSAC(BaseSupraspine):
         self.kwargs = kwargs
 
         self.perception_mode = perception_mode
-        self.proprio_delay = proprioception_delay_steps;
+        self.proprio_delay = proprio_delay_steps;
         self.visual_delay = visual_delay_steps;
         self.action_delay = action_delay_steps;
         self.proprio_filter_spec = proprio_filter;
         self.visual_filter_spec = visual_filter;
         self.action_filter_spec = action_filter;
 
-    def update_perception(self):
+
+
+
+
+    def _update_perception(self):
         if self.perception_mode == 'proprio-visual':
             raw = self.env.spine.sample()
             if self.proprio_filter is not None:
                 raw = self.proprio_filter.filter(raw)
             self.proprio_buffer.push(raw)
+            self.proprio[:] = self.proprio_buffer.sample()
+
         visual = np.array(
             [self.env.data.qpos[-1].copy(),
              self.env.data.qvel[-1].copy()
             ])
+
         if self.visual_filter is not None:
             visual = self.visual_filter.filter(visual)
         self.visual_buffer.push(visual)
+        self.visual[:] = self.visual_buffer.sample()
+        self.visual_centered[0] = self.visual[0] - np.pi
+        self.visual_centered[1] = self.visual[1]
 
-    def update_action(self, action):
+    def _update_action(self):
         if self.action_filter is not None:
-            action = self.action_filter.filter(np.asarray(action))
-        self.action_buffer.push(action)
+            self.action[:] = self.action_filter.filter(
+                np.asarray(self.action)
+            )
+        self.action_buffer.push(self.action)
+
+    def update(self):
+        self._update_perception();
+        self._update_action();
 
     def sample_action(self):
-        return self.action_buffer.sample()
+        self.action[:] = self.action_buffer.sample()
+        return self.action
 
     def sample(self):
         if self.perception_mode == 'visual-only':
-            return self.visual_buffer.sample()
-        return np.concatenate(
-            (
-                self.proprio_buffer.sample(),
-                self.visual_buffer.sample()
-            )
-        )
+            return self.visual.copy()
+        return np.concatenate((self.proprio, self.visual))
 
     def update_seed(self, seed):
         self.rng = np.random.default_rng(int(seed))
 
     def _initialize(self):
 
-        self.drive[:] = np.zeros(self.n)
+        self.action = np.zeros(self.n)
+        self.proprio = np.zeros(self.n)
+        self.visual = np.zeros(2)
+        self.visual_centered = np.zeros(2)
 
         self.env.action_space = spaces.Box(
             low=np.zeros(self.n, dtype=np.float32),
@@ -155,6 +170,5 @@ class MlpSAC(BaseSupraspine):
         print(f'  ent_coef:    {self.model.ent_coef}')
 
 
-    def forward(self, action):
-        self.drive[:] = action
-        return self.drive
+    def set_action(self, action):
+        self.action[:] = action

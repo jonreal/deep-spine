@@ -97,7 +97,7 @@ class BaseSpine:
             self.simulation_frame_count += 1
 
     def set_descending_drive(self, drive) -> None:
-        self.drive = drive
+        self.drive[:] = drive
 
     @abstractmethod
     def _initialize(self) -> None:

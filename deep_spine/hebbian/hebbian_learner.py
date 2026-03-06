@@ -11,7 +11,7 @@ class HebbianLearner:
         W,
         pre,
         post,
-        path_to_log = './hebbian-data',
+        path_to_log = None,
         gain = 1,
         learning_rate=0.01,
         lock_target = None,
