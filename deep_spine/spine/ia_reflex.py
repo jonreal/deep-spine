@@ -94,7 +94,6 @@ class IaReflexSpine(BaseSpine):
                 'decimation_factor',
             ]
         }
-        iareflex_kwargs.pop('mechanics_filter_cutoff', None)
         super().__init__(**base_args)
         self.type = 'ia_reflex'
         self.kwargs = iareflex_kwargs

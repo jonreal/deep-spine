@@ -210,7 +210,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.log_ic_q1 = self.current_ic_q1
         self.log_fc_q0 = self.data.qpos[0]
         self.log_fc_q1 = self.data.qpos[1]
-        self.log_fc_pend = np.sum(self.data.qpos) % (2 * np.pi)
+        self.log_fc_pend = (np.sum(self.data.qpos) - np.pi) % (2*np.pi) - np.pi
 
     def _set_initial_conditions(self):
         self.done = False
@@ -248,18 +248,15 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         if self.done:
             return
 
-        # Entering inverted state
-        if (not self.inverted_flag and (self.pendulum_pos >= 3/4*np.pi
-                 and self.pendulum_pos <= 5/4*np.pi)
-          ):
+        # Entering inverted state (0 = balanced, ±pi = hanging)
+        if (not self.inverted_flag
+                and abs(self.pendulum_pos) <= np.pi/4):
           self.inverted_flag = True
           self.t0 = self.data.time
 
         # Check fail or solved
         if self.inverted_flag:
-            out_of_bounds = (
-                self.pendulum_pos < 3/4*np.pi or self.pendulum_pos > 5/4*np.pi
-            )
+            out_of_bounds = abs(self.pendulum_pos) > np.pi/4
             time_exceeded_while_inverted = (
                 (self.data.time - self.t0) > self.max_time
             )
@@ -282,7 +279,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
     def _update_reward(self):
 
-        mu = np.pi
+        mu = 0
         sig = np.pi/16
         scale = 1000
         fgauss = 0
@@ -325,11 +322,16 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
             mujoco.mj_step(self.model, self.data)
 
-            self.pendulum_pos = np.sum(self.data.qpos) % (2*np.pi)
+            # World-frame pendulum angle, 0 = inverted (balanced)
+            self.pendulum_pos = (np.sum(self.data.qpos) - np.pi) % (2*np.pi) - np.pi
             self.pendulum_vel = np.sum(self.data.qvel)
 
             self._render()
             self._update_figures()
+
+            self.supraspine.update()
+            self._write_data_to_logfile()
+
             self._update_status()
 
             # Stop mid decimation if needed
@@ -338,11 +340,8 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
             self._update_reward()
 
-            self.supraspine.update()
-
             self.simulation_steps += 1
 
-            #self._write_data_to_logfile()
 
         self.ep_reward += self.reward
         self.obs = self.supraspine.sample()
@@ -372,6 +371,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
     def _write_data_to_logfile(self):
         if self.logfile:
             data = np.concatenate([
+                np.array([self.eps]),
                 np.array([self.data.time]),
                 self.data.qpos,
                 self.data.qvel,
@@ -380,16 +380,13 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
                 self.spine.force,
                 self.spine.act_II,
                 self.spine.act_Ia,
-                self.supraspine.drive,
                 self.spine.act_MN,
+                self.spine.drive,
                 self.spine.act_muscle,
                 self.spine.act,
+                self.supraspine.visual,
+                self.supraspine.action,
             ])
-            # As a string
-            #data_str = ','.join(map('{:.6f}'.format, data))
-            #print(data_str, file=self.logfile)
-
-            # As a byte string
             self.logfile.write(data.tobytes())
 
 class LogCallbackArm26Pendulum(BaseCallback):

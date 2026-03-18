@@ -86,7 +86,6 @@ class IdentitySpine(BaseSpine):
                 'decimation_factor',
             ]
         }
-        identity_kwargs.pop('mechanics_filter_cutoff', None)
         super().__init__(**base_args)
         self.type = 'identity'
         self.kwargs = identity_kwargs

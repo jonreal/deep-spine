@@ -7,6 +7,7 @@ import torch
 import traceback
 import mujoco
 from pathlib import Path
+from torch.utils.tensorboard import SummaryWriter
 
 # Deep spine imports
 from deep_spine import (
@@ -76,6 +77,9 @@ def main():
     parser.add_argument('--custom', type=parse_json_or_path, default=None,
         help="Path to custom override JSON file (e.g. for options)."
     )
+    parser.add_argument('--eval', nargs='?', type=int, const=100, default=None,
+        metavar='NUM_EPS',
+        help="Forward sim mode: run trained policy for NUM_EPS episodes (default 100).")
     parser.add_argument('--log', action='store_true', help="Enable logging.");
     parser.add_argument('--show', action='store_true',
         help="Enable rendering at 10 fps.")
@@ -251,43 +255,70 @@ def main():
     muscle_increase_factor = options.get("muscle_increase_factor", 1.1)
     max_muscle_strength = options.get("max_muscle_strength", 1.0)
 
-
-
     try:
         if supraspine_type in ('PPO', 'SAC'):
-            mdir = f'./{log_dir}/model'
-            os.makedirs(mdir, exist_ok=True)
-            check_points = options.get("check_points",1)
-            total_timesteps = options.get("total_timesteps",1000)
-            steps_per_check = int(total_timesteps / check_points)
-            prev_total_steps = 0
-            tb_mov_ave_eps_win = 10
 
+            if args.eval is None:
+                # Training mode
+                mdir = f'./{log_dir}/model'
+                os.makedirs(mdir, exist_ok=True)
+                check_points = options.get("check_points",1)
+                total_timesteps = options.get("total_timesteps",1000)
+                steps_per_check = int(total_timesteps / check_points)
+                prev_total_steps = 0
+                tb_mov_ave_eps_win = 10
 
-            tensorboard_callback = LogCallbackArm26Pendulum(
-                env=env,
-                window=tb_mov_ave_eps_win
-            )
-
-            for i in range(check_points):
-                tstart = time.time()
-                print(f'{sim_id}: iteration {i+1}/{check_points}:')
-
-                supraspine.model.learn(
-                    total_timesteps=steps_per_check,
-                    reset_num_timesteps=False,
-                    progress_bar=False,
-                    callback=tensorboard_callback
+                tensorboard_callback = LogCallbackArm26Pendulum(
+                    env=env,
+                    window=tb_mov_ave_eps_win
                 )
-                supraspine.model.save(
-                    f'{mdir}/{supraspine.model.num_timesteps}'
-                )
-                tend = time.time()
-                total_steps = supraspine.model.num_timesteps
-                nsteps =  total_steps - prev_total_steps
-                prev_total_steps = total_steps
-                print(f'sim-steps per sec: {nsteps / (tend - tstart):.1f}')
-                print('---\n\n')
+
+                for i in range(check_points):
+                    tstart = time.time()
+                    print(f'{sim_id}: iteration {i+1}/{check_points}:')
+
+                    supraspine.model.learn(
+                        total_timesteps=steps_per_check,
+                        reset_num_timesteps=False,
+                        progress_bar=False,
+                        callback=tensorboard_callback
+                    )
+                    supraspine.model.save(
+                        f'{mdir}/{supraspine.model.num_timesteps}'
+                    )
+                    tend = time.time()
+                    total_steps = supraspine.model.num_timesteps
+                    nsteps =  total_steps - prev_total_steps
+                    prev_total_steps = total_steps
+                    print(f'sim-steps per sec: {nsteps / (tend - tstart):.1f}')
+                    print('---\n\n')
+
+            else:
+                # Forward sim — deterministic policy evaluation
+                num_eps = args.eval
+                dt = env.model.opt.timestep
+                tb_dir = supraspine.model.tensorboard_log
+                writer = SummaryWriter(log_dir=tb_dir)
+                obs, _ = env.reset()
+                for i in range(num_eps):
+                    tstart = time.time()
+                    done = False
+                    while not done:
+                        action = supraspine.predict(obs)
+                        obs, reward, done, truncated, info = env.step(action)
+                    sim_steps = env.data.time / dt
+                    obs, _ = env.reset()
+                    writer.add_scalar("eps/ep_rew", env.log_eps_reward, i)
+                    writer.add_scalar("eps/solved", env.solved, i)
+                    writer.add_scalar("eps/ic_q0", env.log_ic_q0, i)
+                    writer.add_scalar("eps/ic_q1", env.log_ic_q1, i)
+                    writer.add_scalar("eps/fc_q0", env.log_fc_q0, i)
+                    writer.add_scalar("eps/fc_q1", env.log_fc_q1, i)
+                    writer.add_scalar("eps/fc_pend", env.log_fc_pend, i)
+                    tend = time.time()
+                    print(f'Eps {i+1}/{num_eps}: '
+                          f'sim-steps/sec: {sim_steps/(tend-tstart):.1f}')
+                writer.close()
 
         else:
 
@@ -295,13 +326,6 @@ def main():
             last_write_time = 0.0
             tinit = time.time()
             data_file = open(f'./{log_dir}/data.txt', 'wb')
-
-            #min_eps = options.get("min_eps", 30)
-            #convergence_monitor = WindowStationarity(
-            #    T=int(env.episode_length), M=3,
-            #    rtol_mu=options.get("epsilon", 1e-2),
-            #    atol_sig=options.get("atol_sig", 1e-3),
-            #)
 
             for i in range(options.get("num_eps", 50)):
                 tstart = time.time()
@@ -323,14 +347,9 @@ def main():
                         current_time > 0
                         and current_time > int(last_write_time)
                     ):
-
-                        # Convergence signal
                         all_W = (
                             torch.cat([l.W.flatten() for l in learners])
                         )
-                        #wp = (all_W**2).mean().sqrt().item()
-                        #is_converged, info = convergence_monitor.update(wp)
-
                         row = np.concatenate([
                             np.array([i+1, current_time, muscle_strength],
                                      dtype=np.float64),
@@ -347,19 +366,7 @@ def main():
                 env.set_muscle_strength(muscle_strength)
                 print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
                 print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')
-                #if info.get('status') == 'window_done':
-                #    print(f'convergence: {info["n_windows"]}/{info["M"]} windows, '
-                #          f'mu={info["mu"]:.4g}, sig={info["sig"]:.4g}')
-                #    if 'mu_span_rel' in info:
-                #        print(f'  mu_span={info["mu_span_rel"]:.2e} (tol={info["rtol_mu"]:.2e}), '
-                #              f'sig_max={info["sig_max"]:.2e} (tol={info["atol_sig"]:.2e})')
                 print('---\n\n')
-
-                #if is_converged and i >= min_eps:
-                #    print('\n---\n')
-                #    print(f'Simulation converged at episode {i+1}')
-                #    print('\n---\n')
-                #    break;
 
             print('\n---\n')
             print(f'Total sim time: {(tend - tinit):.1f} (sec), '

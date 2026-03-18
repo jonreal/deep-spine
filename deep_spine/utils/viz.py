@@ -497,8 +497,8 @@ def make_supraspine_viz(supraspine, xs, ys, H, W, T, timestep):
     traces = [
         ('act', supraspine.action, n, [0, 1], False),
         ('pro', supraspine.proprio, n, [0, 1], False),
-        ('pos', supraspine.visual_centered[0:1], 1, [-np.pi, np.pi], True),
-        ('vel', supraspine.visual_centered[1:2], 1, [-5*np.pi, 5*np.pi], True),
+        ('pos', supraspine.visual[0:1], 1, [-np.pi, np.pi], True),
+        ('vel', supraspine.visual[1:2], 1, [-5*np.pi, 5*np.pi], True),
     ]
     N = int(T / timestep)
     figs = []

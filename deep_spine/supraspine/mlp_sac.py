@@ -1,3 +1,4 @@
+import os
 import types
 import numpy as np
 from scipy import signal
@@ -25,6 +26,7 @@ class MlpSAC(BaseSupraspine):
     def __init__(
         self,
         kwargs = None,
+        checkpoint = None,
         decimation_factor: int = 1,
         proprio_delay_steps = 0,
         visual_delay_steps = 0,
@@ -44,6 +46,7 @@ class MlpSAC(BaseSupraspine):
                 kwargs["train_freq"], list):
             kwargs["train_freq"] = tuple(kwargs["train_freq"])
         self.kwargs = kwargs
+        self.checkpoint = checkpoint
 
         self.perception_mode = perception_mode
         self.proprio_delay = proprio_delay_steps;
@@ -65,17 +68,21 @@ class MlpSAC(BaseSupraspine):
             self.proprio_buffer.push(raw)
             self.proprio[:] = self.proprio_buffer.sample()
 
+        # World-frame pendulum state (modulo-wrapped, computed in env.step)
         visual = np.array(
-            [self.env.data.qpos[-1].copy(),
-             self.env.data.qvel[-1].copy()
+            [self.env.pendulum_pos,
+             self.env.pendulum_vel
             ])
+        # Joint-frame (raw qpos[-1], unbounded)
+        #visual = np.array(
+        #    [self.env.data.qpos[-1].copy(),
+        #     self.env.data.qvel[-1].copy()
+        #    ])
 
         if self.visual_filter is not None:
             visual = self.visual_filter.filter(visual)
         self.visual_buffer.push(visual)
         self.visual[:] = self.visual_buffer.sample()
-        self.visual_centered[0] = self.visual[0] - np.pi
-        self.visual_centered[1] = self.visual[1]
 
     def _update_action(self):
         if self.action_filter is not None:
@@ -105,7 +112,6 @@ class MlpSAC(BaseSupraspine):
         self.action = np.zeros(self.n)
         self.proprio = np.zeros(self.n)
         self.visual = np.zeros(2)
-        self.visual_centered = np.zeros(2)
 
         self.env.action_space = spaces.Box(
             low=np.zeros(self.n, dtype=np.float32),
@@ -146,15 +152,24 @@ class MlpSAC(BaseSupraspine):
         self.action_filter = _make_filter(
             self.action_filter_spec, (self.n,))
 
-        # Extract net_arch from kwargs if provided, else default
-        net_arch = self.kwargs.pop("net_arch", [16, 16])
-        policy_kwargs = dict(
-            activation_fn=torch.nn.ReLU,
-            net_arch=dict(pi=net_arch, qf=net_arch)
-        )
-        self.model = SAC("MlpPolicy", self.env,
-            policy_kwargs=policy_kwargs, **self.kwargs,
-        )
+        if self.checkpoint:
+            path = self._resolve_checkpoint(self.checkpoint)
+            # Pass kwargs minus net_arch (architecture is in the checkpoint)
+            load_kwargs = {k: v for k, v in self.kwargs.items()
+                          if k != "net_arch"}
+            self.model = SAC.load(path, env=self.env, **load_kwargs)
+            print(f'  Loaded checkpoint: {path}')
+        else:
+            net_arch = self.kwargs.get("net_arch", [16, 16])
+            model_kwargs = {k: v for k, v in self.kwargs.items()
+                           if k != "net_arch"}
+            policy_kwargs = dict(
+                activation_fn=torch.nn.ReLU,
+                net_arch=dict(pi=net_arch, qf=net_arch)
+            )
+            self.model = SAC("MlpPolicy", self.env,
+                policy_kwargs=policy_kwargs, **model_kwargs,
+            )
 
         print('--- SAC Controller ---')
         print(f'  perception:  {self.perception_mode}')
@@ -169,6 +184,17 @@ class MlpSAC(BaseSupraspine):
         print(f'  tau:         {self.model.tau}')
         print(f'  ent_coef:    {self.model.ent_coef}')
 
+
+    @staticmethod
+    def _resolve_checkpoint(checkpoint):
+        """Resolve checkpoint: explicit path to a .zip model file."""
+        if isinstance(checkpoint, str) and os.path.exists(checkpoint):
+            return checkpoint
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+
+    def predict(self, obs):
+        action, _ = self.model.predict(obs, deterministic=True)
+        return action
 
     def set_action(self, action):
         self.action[:] = action
