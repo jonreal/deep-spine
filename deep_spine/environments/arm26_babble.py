@@ -92,27 +92,31 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         # Mechanics Properties
         self.model.opt.gravity = gravity;
         self.model.opt.viscosity = viscosity;
-        self.model.dof_damping[:] = 1
+        self.model.dof_damping[:] = damping;
 
 
-        # Scale diag inertias based on mass changes equivalent to scaling
+        # Only for arm26.xml
+        # Scale diag inertias based on
+        # mass changes equivalent to scaling
         # density
-        oldmass = self.model.body_mass
-        oldinertia = self.model.body_inertia
+        if xml_path is 'arm26.xml':
+            oldmass = self.model.body_mass
+            oldinertia = self.model.body_inertia
 
-        # s = body_mass / oldmass, but: if oldmass==0 -> leave s at 0 
-        eps = 0.0  # or 1e-12 if you want "near-zero counts as zero"
+            # s = body_mass / oldmass,
+            # but: if oldmass==0 -> leave s at 0
+            eps = 0.0
+            s = np.divide(
+                body_mass, oldmass,
+                out=np.zeros_like(body_mass, dtype=float),
+                where=(oldmass != eps)
+            )
 
-        s = np.divide(
-            body_mass, oldmass,
-            out=np.zeros_like(body_mass, dtype=float),
-            where=(oldmass != eps)
-        )
-
-        self.model.body_mass = body_mass
-        self.model.body_inertia = s[:, None] * oldinertia
+            self.model.body_mass = body_mass
+            self.model.body_inertia = s[:, None] * oldinertia
 
 
+        print(f'Model: {xml_path}\n')
         print('Mechanical Properties\n')
         print('body_mass: ', self.model.body_mass)
         print('body inertia: \n', self.model.body_inertia)
@@ -130,7 +134,7 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.model.actuator_gainprm[:,3] = (
             strength * self.default_muscle_strengths
         )
-        #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
+        print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
 
     def update_seed(self, seed):
         self.seed = int(seed)
@@ -154,16 +158,8 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def _set_initial_conditions(self):
         self.done = False
-        #mujoco.mj_resetData(self.model, self.data)
         self.data.time = 0
         self.spine.set_descending_drive(np.zeros(self.spine.n,))
-        #mujoco.mj_forward(self.model, self.data)
-
-        large_prime = 78531
-        self.seed = str(int(self.seed * large_prime * (self.eps + 1)))
-        self.seed = int(self.seed[:5])
-        self.ic_rng = np.random.default_rng(self.seed)
-        self.supraspine.update_seed(self.seed)
         self.simulation_steps = 0
 
     def _update_status(self):
@@ -173,7 +169,6 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def step(self, action):
         self.reward = 0
-        #self.spinal_layer.set_descending_drive(self.babble_signal)
 
         drive = self.supraspine.forward(self.data);
         self.spine.set_descending_drive(drive)

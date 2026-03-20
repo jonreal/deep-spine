@@ -156,10 +156,6 @@ class Arm26(BaseEnvironment, gym.Env):
         mj.mj_forward(self.model, self.data)
         self._update_ghost()
 
-        large_prime = 78531
-        self.seed = str(int(self.seed * large_prime * (self.eps + 1)))
-        self.seed = int(self.seed[:5])
-        self.ic_rng = np.random.default_rng(self.seed)
         self.simulation_steps = 0
 
     def _gen_target(self):
