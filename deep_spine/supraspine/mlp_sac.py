@@ -35,6 +35,7 @@ class MlpSAC(BaseSupraspine):
         visual_filter = None,
         action_filter = None,
         perception_mode = 'proprio-visual',
+        visual_mode = 'joint',
         seed= 12345
     ):
 
@@ -49,6 +50,7 @@ class MlpSAC(BaseSupraspine):
         self.checkpoint = checkpoint
 
         self.perception_mode = perception_mode
+        self.visual_mode = visual_mode
         self.proprio_delay = proprio_delay_steps;
         self.visual_delay = visual_delay_steps;
         self.action_delay = action_delay_steps;
@@ -68,16 +70,16 @@ class MlpSAC(BaseSupraspine):
             self.proprio_buffer.push(raw)
             self.proprio[:] = self.proprio_buffer.sample()
 
-        # World-frame pendulum state (modulo-wrapped, computed in env.step)
-        visual = np.array(
-            [self.env.pendulum_pos,
-             self.env.pendulum_vel
-            ])
-        # Joint-frame (raw qpos[-1], unbounded)
-        #visual = np.array(
-        #    [self.env.data.qpos[-1].copy(),
-        #     self.env.data.qvel[-1].copy()
-        #    ])
+        if self.visual_mode == 'world':
+            visual = np.array(
+                [self.env.pendulum_pos,
+                 self.env.pendulum_vel
+                ])
+        else:
+            visual = np.array(
+                [self.env.data.qpos[-1].copy(),
+                 self.env.data.qvel[-1].copy()
+                ])
 
         if self.visual_filter is not None:
             visual = self.visual_filter.filter(visual)
@@ -173,6 +175,7 @@ class MlpSAC(BaseSupraspine):
 
         print('--- SAC Controller ---')
         print(f'  perception:  {self.perception_mode}')
+        print(f'  visual_mode: {self.visual_mode}')
         print(f'  obs_dim:     {self.env.observation_space.shape[0]}')
         print(f'  act_dim:     {self.env.action_space.shape[0]}')
         print(f'  net_arch:    {self.model.policy_kwargs.get("net_arch", "default")}')

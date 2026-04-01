@@ -41,13 +41,6 @@ class Identity(nn.Module):
             saturation_constant=Ia_saturation_constant,
             vel_gain=Ia_velocity_gain
         )
-        self.MN = Neuron(
-            self.n,
-            kalman_gain=kalman_gain,
-            static_leak=static_leak,
-            dynamic_leak=dynamic_leak,
-            shunt_model=shunt_model,
-        )
         self.muscle = Muscle(
             self.n,
             bias=muscle_bias,
@@ -66,13 +59,8 @@ class Identity(nn.Module):
         act_II = self.II(length, activation)
         act_Ia = self.Ia(velocity, act_II, activation)
 
-
-        # Not clamped
-        synaptic_activation = drive
-        open_channels = drive
-
-        act_MN = self.MN(synaptic_activation,open_channels)
-        act_muscle = self.muscle(act_MN)
+        act_muscle = self.muscle(drive)
+        act_MN = torch.zeros((self.n,))
 
         return act_II, act_Ia, act_MN, act_muscle
 

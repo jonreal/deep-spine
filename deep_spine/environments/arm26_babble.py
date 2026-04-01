@@ -61,6 +61,35 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         else:
             self.logfile = None
 
+        # Update body masses via MjSpec and recompile so MuJoCo
+        # recomputes inertia/ipos exactly.
+        # Must happen BEFORE spine/supraspine init (they cache model refs).
+        if xml_path == 'arm26.xml':
+            for geom_spec in self.spec.geoms:
+                gid = mujoco.mj_name2id(
+                    self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_spec.name
+                )
+                if gid >= 0:
+                    bid = self.model.geom_bodyid[gid]
+                    new_mass = body_mass[bid]
+                    if new_mass > 0 and geom_spec.mass > 0:
+                        geom_spec.mass = float(new_mass)
+
+            self.model, self.data = self.spec.recompile(self.model, self.data)
+
+        # Apply non-geom mechanical properties (after recompile)
+        self.model.dof_damping[:] = damping
+        gravity = gravity if gravity is not None else [0, 0, 0]
+        self.model.opt.gravity[:] = gravity
+        gravity_bit = int(mujoco.mjtDisableBit.mjDSBL_GRAVITY)
+        if np.allclose(gravity, 0):
+            self.model.opt.disableflags |= gravity_bit
+        else:
+            self.model.opt.disableflags &= ~gravity_bit
+        self.model.opt.viscosity = viscosity
+        mujoco.mj_forward(self.model, self.data)
+
+        # Now initialize spine/supraspine with the final model
         self.spine = self.initialize_spine(spine)
         self.supraspine = self.initialize_supraspine(supraspine)
 
@@ -88,53 +117,37 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
 
+        mujoco.mj_resetData(self.model, self.data)
+        mujoco.mj_forward(self.model, self.data)
 
-        # Mechanics Properties
-        self.model.opt.gravity = gravity;
-        self.model.opt.viscosity = viscosity;
-        self.model.dof_damping[:] = damping;
-
-
-        # Only for arm26.xml
-        # Scale diag inertias based on
-        # mass changes equivalent to scaling
-        # density
-        if xml_path is 'arm26.xml':
-            oldmass = self.model.body_mass
-            oldinertia = self.model.body_inertia
-
-            # s = body_mass / oldmass,
-            # but: if oldmass==0 -> leave s at 0
-            eps = 0.0
-            s = np.divide(
-                body_mass, oldmass,
-                out=np.zeros_like(body_mass, dtype=float),
-                where=(oldmass != eps)
-            )
-
-            self.model.body_mass = body_mass
-            self.model.body_inertia = s[:, None] * oldinertia
-
-
+        np.set_printoptions(precision=2, suppress=True)
+        print('\n--- Environment Properties ---')
         print(f'Model: {xml_path}\n')
-        print('Mechanical Properties\n')
         print('body_mass: ', self.model.body_mass)
         print('body inertia: \n', self.model.body_inertia)
         print(f'gravity: {self.model.opt.gravity}')
         print(f'viscosity: {self.model.opt.viscosity}')
-        print(f'damping: {self.model.dof_damping}\n\n')
+        print(f'damping: {self.model.dof_damping}')
+        print('Muscle Normalization:')
+        print('L0: ', self.spine.L0)
+        print('lmin: ', self.spine.lmin)
+        print('lmax: ', self.spine.lmax)
+        print('vmax: ', self.spine.vmax)
+        self.spine._sample_mechanics(self.data)
+        print('length at rest: ', self.spine.length)
+        print()
+        np.set_printoptions()
 
         # Cache for the tb log file
         self.log_eps = 0
         self.log_eps_reward = 0
-
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
         self.model.actuator_gainprm[:,3] = (
             strength * self.default_muscle_strengths
         )
-        print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
+        #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
 
     def update_seed(self, seed):
         self.seed = int(seed)

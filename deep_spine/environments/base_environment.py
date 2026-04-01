@@ -128,7 +128,8 @@ class BaseEnvironment(object):
         scale_filter.link_to(self.buffer_sink)
 
     def _initialize_mujoco(self):
-        self.model = mujoco.MjModel.from_xml_path(self.xml_path)
+        self.spec = mujoco.MjSpec.from_file(self.xml_path)
+        self.model = self.spec.compile()
         self.data = mujoco.MjData(self.model)
         mujoco.mj_resetData(self.model, self.data)
         mujoco.mj_forward(self.model, self.data)

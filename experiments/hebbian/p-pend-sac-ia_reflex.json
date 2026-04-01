@@ -2,19 +2,19 @@
   "log_dir": "./logs/PNAS/one-offs/",
   "options": {
     "seed": 1,
-    "check_points": 100,
-    "total_timesteps": 500000
+    "check_points": 10,
+    "total_timesteps": 1000000
   },
   "env_kwargs": {
     "type": "arm26_pendulum",
-    "damping": 1,
+    "damping": 0.01,
     "viscosity": 0,
     "gravity": [9.81, 0.0, 0.0],
-    "body_mass": [0, 2, 1, 0.25, 0],
-    "relative_muscle_scale": [1, 1, 0.8, 0.8, 0.5, 0.5],
-    "pendulum_noise": 0.0,
-    "muscle_strength": 0.8,
-    "frame_rate": 10,
+    "body_mass": [0, 2, 1, 1, 0],
+    "relative_muscle_scale": [1, 1, 0.5, 0.5, 0.25, 0.25],
+    "pendulum_length": 0.5,
+    "muscle_strength": 1,
+    "frame_rate": [],
     "video_scale": 1,
     "video_crf": 28,
     "window_width": 1200,
@@ -24,7 +24,6 @@
   "spine_kwargs": {
     "type": "ia_reflex",
     "decimation_factor": 1,
-    "mechanics_filter_cutoff": 0.0,
     "II_length_gain": 1.25,
     "II_bias": -0.2,
     "Ia_II_gain": 0.2,
@@ -36,23 +35,27 @@
     "shunt_model": "linear",
     "static_leak": 0.6,
     "dynamic_leak": 1,
-    "W_Ia": "logs/exp8/sweep_strength_babble_gain_0/1755753610/data.txt"
+    "W_Ia": "./logs/hebbian-sweeps/m0-b0-sweeps_S1_E05_B025/run1/1772441330/data.txt"
   },
   "supraspine_kwargs": {
     "type": "SAC",
+    "visual_mode": "joint",
     "decimation_factor": 10,
-    "proprioception_delay_steps": 10,
+    "proprio_delay_steps": 10,
     "visual_delay_steps": 20,
     "action_delay_steps": 10,
+    "proprio_filter": {"order": 1, "cutoff": 0.1, "type": "low"},
+    "visual_filter":  {"order": 1, "cutoff": 0.1, "type": "low"},
+    "action_filter":  [],
     "kwargs" : {
       "learning_rate": 0.0005,
-      "buffer_size": 100000,
+      "buffer_size": 1000000,
       "batch_size": 256,
       "train_freq":[1,"step"],
       "tau": 0.005,
       "gamma": 0.99,
       "learning_starts": 1000,
-      "gradient_steps": 4,
+      "gradient_steps": 8,
       "ent_coef": "auto",
       "target_update_interval": 1,
       "use_sde": false,
@@ -70,6 +73,14 @@
       "spine": "spine",
       "supraspine": "supraspine",
       "xs": 900, "ys": 900, "T": 1, "H": 80, "W": 300,
+      "timestep": "env.model.opt.timestep"
+    },
+    {
+      "type": "supraspine_viz",
+      "supraspine": "supraspine",
+      "xs": 50,
+      "ys": 500,
+      "H": 60, "W": 300, "T": 1,
       "timestep": "env.model.opt.timestep"
     },
     {

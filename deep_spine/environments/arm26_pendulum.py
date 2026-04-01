@@ -32,7 +32,8 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         damping = 1,
         viscosity = 0,
         gravity = [9.81, 0, 0],
-        body_mass: np.ndarray = [0, 2, 1, 0.25, 0],
+        body_mass: np.ndarray = [0, 2, 1, 1, 0],
+        pendulum_length: float = None,
         muscle_strength: float = 1,
         relative_muscle_scale: np.ndarray = None,
         seed: Optional[int] = 12345,
@@ -73,6 +74,34 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         else:
             self.logfile = None
 
+        # Update body masses and pendulum length via MjSpec, then
+        # recompile so MuJoCo recomputes inertia/ipos exactly.
+        # Must happen BEFORE spine/supraspine init (they cache model refs).
+        for geom_spec in self.spec.geoms:
+            gid = mujoco.mj_name2id(
+                self.model, mujoco.mjtObj.mjOBJ_GEOM, geom_spec.name
+            )
+            if gid >= 0:
+                bid = self.model.geom_bodyid[gid]
+                new_mass = body_mass[bid]
+                if new_mass > 0 and geom_spec.mass > 0:
+                    geom_spec.mass = float(new_mass)
+
+        if pendulum_length is not None:
+            pend = self.spec.geom('pendulum')
+            pend.fromto = [0, 0, 0, pendulum_length, 0, 0]
+            pend_end_body = list(self.spec.bodies)[4]
+            pend_end_body.pos = [pendulum_length, 0, 0]
+
+        self.model, self.data = self.spec.recompile(self.model, self.data)
+
+        # Apply non-geom mechanical properties (after recompile)
+        self.model.opt.gravity = gravity
+        self.model.opt.viscosity = viscosity
+        self.model.dof_damping[:] = damping
+        mujoco.mj_forward(self.model, self.data)
+
+        # Now initialize spine/supraspine with the final model
         self.spine = self.initialize_spine(spine)
         self.supraspine = self.initialize_supraspine(supraspine)
 
@@ -108,7 +137,6 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.ic_rng = np.random.default_rng(self.seed + 1)
 
         if relative_muscle_scale is None:
-            # There's a motor at the pendulum joint
             relative_muscle_scale = self.model.nu
 
         self.relative_muscle_scale = relative_muscle_scale
@@ -124,35 +152,26 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.ep_reward = 0
         self.log_eps_reward = 0
 
-        # Mechanics Properties
-        self.model.opt.gravity = gravity;
-        self.model.opt.viscosity = viscosity;
-        self.model.dof_damping[:] = damping
+        np.set_printoptions(precision=2, suppress=True)
+        print('\n--- Environment Properties ---')
+        print(f'Model: {xml_path}')
+        print(f'Reward type: {self.reward_type}')
+        print('body_mass: ', self.model.body_mass)
+        print('body inertia: ', self.model.body_inertia)
+        print('pendulum length: ', pendulum_length)
+        print(f'gravity: {self.model.opt.gravity}')
+        print(f'viscosity: {self.model.opt.viscosity}')
+        print(f'damping: {self.model.dof_damping}\n')
+        print('Muscle Normalization:')
+        print('L0: ', self.spine.L0)
+        print('lmin: ', self.spine.lmin)
+        print('lmax: ', self.spine.lmax)
+        print('vmax: ', self.spine.vmax)
+        self.spine._sample_mechanics(self.data)
+        print('normalized length at rest: ', self.spine.length)
+        print()
+        np.set_printoptions()
 
-
-        # Scale diag inertias based on mass changes equivalent to scaling
-        # density
-        oldmass = self.model.body_mass
-        oldinertia = self.model.body_inertia
-
-        # s = body_mass / oldmass, but: if oldmass==0 -> leave s at 0
-        eps = 0.0  # or 1e-12 if you want "near-zero counts as zero"
-
-        s = np.divide(
-            body_mass, oldmass,
-            out=np.zeros_like(body_mass, dtype=float),
-            where=(oldmass != eps)
-        )
-
-        self.model.body_mass = body_mass
-        self.model.body_inertia = s[:, None] * oldinertia
-
-        mujoco.mj_forward(self.model, self.data)
-        print('--- Mechanical Properties ---')
-        print(f'  body_mass:  {self.model.body_mass.tolist()}')
-        print(f'  gravity:    {self.model.opt.gravity.tolist()}')
-        print(f'  damping:    {self.model.dof_damping.tolist()}')
-        print(f'  viscosity:  {self.model.opt.viscosity}')
         joint_names = [
             mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_JOINT, j)
             for j in range(self.model.nv)
@@ -210,7 +229,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.log_ic_q1 = self.current_ic_q1
         self.log_fc_q0 = self.data.qpos[0]
         self.log_fc_q1 = self.data.qpos[1]
-        self.log_fc_pend = (np.sum(self.data.qpos) - np.pi) % (2*np.pi) - np.pi
+        self.log_fc_pend = np.sum(self.data.qpos) % (2*np.pi) - np.pi
 
     def _set_initial_conditions(self):
         self.done = False
@@ -281,7 +300,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
         mu = 0
         sig = np.pi/16
-        scale = 1000
+        scale = 10
         fgauss = 0
         #if not self.done:
         #    if (self.task == 'swing-up'):
@@ -297,6 +316,9 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         #    -np.power(self.pendulum_pos-mu, 2.)/(2*np.power(sig, 2.)))
         #)
         if self.reward_type == 'simple':
+            ftimeint = self.inverted_flag - (not self.inverted_flag)
+        elif self.reward_type == 'simple-gauss':
+            fgauss = np.exp(-0.5 * ((self.pendulum_pos - mu)/sig)**2) / scale
             ftimeint = self.inverted_flag - (not self.inverted_flag)
         elif self.reward_type == 'log':
             ftimeint = self.inverted_flag*(np.log(1 + (self.data.time - self.t0)))
@@ -323,15 +345,11 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
             mujoco.mj_step(self.model, self.data)
 
             # World-frame pendulum angle, 0 = inverted (balanced)
-            self.pendulum_pos = (np.sum(self.data.qpos) - np.pi) % (2*np.pi) - np.pi
+            self.pendulum_pos = np.sum(self.data.qpos) % (2*np.pi) - np.pi
             self.pendulum_vel = np.sum(self.data.qvel)
 
             self._render()
             self._update_figures()
-
-            self.supraspine.update()
-            self._write_data_to_logfile()
-
             self._update_status()
 
             # Stop mid decimation if needed
@@ -339,6 +357,9 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
                 break
 
             self._update_reward()
+
+            self.supraspine.update()
+            self._write_data_to_logfile()
 
             self.simulation_steps += 1
 

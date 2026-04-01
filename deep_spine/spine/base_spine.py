@@ -12,10 +12,16 @@ def init_weight_matrix(value, shape):
     """Initialize weights based on the form of `value`."""
     if value == 0:
         return torch.zeros(shape, dtype=torch.float32)
+    elif value == "identity":
+        return torch.eye(shape[0], shape[1], dtype=torch.float32)
     elif isinstance(value, str) and os.path.isfile(value):
-        data = np.loadtxt(value, delimiter=",")
-        last_row = data[-1]
         flat_size = np.prod(shape)
+        try:
+            data = np.loadtxt(value, delimiter=",")
+            last_row = data[-1]
+        except (UnicodeDecodeError, ValueError):
+            raw = np.fromfile(value, dtype=np.float64)
+            last_row = raw
         return torch.tensor(
             last_row[-flat_size:].reshape(shape), dtype=torch.float32
         )
