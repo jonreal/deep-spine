@@ -1,0 +1,210 @@
+% Nominal model, nominal body
+root = '../experiments/hebbian/logs/hebbian-sweeps/';
+path0 = [root, 'm0-b0-sweeps_S1_E05_B025', ...
+        '/run1/analysis/summary/summary_table.mat'];
+
+ex0 = [root, 'm0-b0-sweeps_S1_E05_B025/run1/', ...
+      '1772404269'];
+
+
+
+path1 = [root, 'm0-b1-sweeps_S1_E05_B025-P1_5D1_5', ...
+        '/run1/analysis/summary/summary_table.mat'];
+
+ex1 = [root, 'm0-b1-sweeps_S1_E05_B025-P1_5D1_5/run1/', ...
+      '1773069062'];
+
+
+
+path2 = [root, 'm1-b0-sweeps_S1_E025_B05', ...
+        '/run1/analysis/summary/summary_table.mat'];
+
+ex2 = [root, 'm1-b0-sweeps_S1_E025_B05/run1/', ...
+      '1772894203'];
+
+
+path3 = [root, 'm1-b1-sweeps_S1_E025_B05-P1_5D1_5', ...
+        '/run1/analysis/summary/summary_table.mat'];
+ex3 = [root, 'm1-b1-sweeps_S1_E025_B05-P1_5D1_5/run1/', ...
+      '1773044089'];
+
+
+path4 = [root, 'm2-b0-sweeps_S05_E05_B075', ...
+        '/run1/analysis/summary/summary_table.mat'];
+
+ex4 = [root, 'm2-b0-sweeps_S05_E05_B075/run1/', ...
+      '1772894302'];
+
+
+path5 = [root, 'm2-b1-sweeps_S05_E05_B075-P1_5D1_5', ...
+        '/run1/analysis/summary/summary_table.mat'];
+
+
+ex5 = [root, 'm2-b1-sweeps_S05_E05_B075-P1_5D1_5/run1/', ...
+      '1773044069'];
+
+paths = {path0,path1,path2,path3,path4,path5};
+labels = {{'SR_0','MR_0'},{'SR_0','MR_1'}, ...
+          {'SR_1','MR_0'},{'SR_1', 'MR_1'}, ...
+          {'SR_2','MR_0'},{'SR_2', 'MR_1'}};
+examples = {ex0,ex1,ex2,ex3,ex4,ex5};
+
+n = numel(paths);
+
+tab = {};
+for i=1:n
+  load(paths{i});
+  tab{i} = summary_table;
+end
+
+nrows = n;
+ncols = 4;
+
+xl = [0.1 1];
+yl = [0.0003    0.0100];
+zl = [0 1];
+
+figure('Position', [431 28  620 950]);
+
+ysp = 0.01;
+xsp = 0.01;
+xpad = 0.1;
+ypad = 0.07;
+
+h = (1 - 2*ypad - (nrows-1)*ysp) / nrows;
+w = (0.66 - 2*xpad - (ncols-1)*xsp) / ncols;
+
+xs = xpad;
+ys = 1 - ypad - h;
+
+for i=1:n
+  pos = [xs, ys, w, h];
+  ax = axes('Position', pos);
+
+  iq = find(tab{i}.('heb_kwa_gai') == 3.5);
+  x = tab{i}.opt_max_mus_str(iq);
+  y = tab{i}.sup_kwa_bab_max_pro(iq);
+  z = tab{i}.r_mean(iq);
+
+  xtl = false;
+  ytl = false;
+  if i == n
+    xtl = true;
+    ytl = true;
+  end
+
+  plot_heatmap(ax,x,y,z,...
+    xl=xl,yl=yl,zl=zl,scale='log',XTickLabels=xtl,YTickLabels=ytl);
+
+  if i==1
+    ann = annotation('textbox','Position',pos+[0,0.02,0,0]);
+    ann.String = 'Reflex';
+    ann.EdgeColor = 'none';
+    ann.HorizontalAlignment = 'center';
+    ann.VerticalAlignment = 'top';
+  end
+
+  ann = annotation('textbox','Position',pos+[-xpad,0.0,0,0]);
+  ann.String = labels{i};
+  ann.EdgeColor = 'none';
+  ann.HorizontalAlignment = 'left';
+  ann.VerticalAlignment = 'middle';
+
+  xs = xs + xsp + w;
+  pos = [xs, ys, w, h];
+  ax = axes('Position', pos);
+
+  iq = find(tab{i}.('heb_kwa_gai') == 3.5);
+  x = tab{i}.opt_max_mus_str(iq);
+  y = tab{i}.sup_kwa_bab_max_pro(iq);
+  z = tab{i}.s_mean(iq);
+
+  plot_heatmap(ax,x,y,z,...
+    xl=xl,yl=yl,zl=zl,scale='log');
+
+  if i==1
+    ann = annotation('textbox','Position',pos+[0,0.02,0,0]);
+    ann.String = 'Synergy';
+    ann.EdgeColor = 'none';
+    ann.HorizontalAlignment = 'center';
+    ann.VerticalAlignment = 'top';
+  end
+
+  xs = xs + xsp + w;
+  pos = [xs, ys, w, h];
+  ax = axes('Position', pos);
+
+  iq = find(tab{i}.('heb_kwa_gai') == 3.5);
+  x = tab{i}.opt_max_mus_str(iq);
+  y = tab{i}.sup_kwa_bab_max_pro(iq);
+  z = tab{i}.a_mean(iq);
+
+  plot_heatmap(ax,x,y,z,...
+    xl=xl,yl=yl,zl=zl,scale='log');
+
+  if i==1
+    ann = annotation('textbox','Position',pos+[0,0.02,0,0]);
+    ann.String = 'Anti-Synergy';
+    ann.EdgeColor = 'none';
+    ann.HorizontalAlignment = 'center';
+    ann.VerticalAlignment = 'top';
+  end
+
+  xs = xs + xsp + w;
+  pos = [xs, ys, w, h];
+  ax = axes('Position', pos);
+
+  iq = find(tab{i}.('heb_kwa_gai') == 3.5);
+  x = tab{i}.opt_max_mus_str(iq);
+  y = tab{i}.sup_kwa_bab_max_pro(iq);
+  z = tab{i}.score_mean(iq);
+
+  plot_heatmap(ax,x,y,z,...
+    xl=xl,yl=yl,zl=zl,scale='log');
+
+  if i==1
+    ann = annotation('textbox','Position',pos+[0,0.02,0,0]);
+    ann.String = 'R*S*(1 - A)';
+    ann.EdgeColor = 'none';
+    ann.HorizontalAlignment = 'center';
+    ann.VerticalAlignment = 'top';
+  end
+
+  xs = xpad;
+  ys = ys - ysp - h;
+end
+
+nrows = 1;
+ncols = 4;
+w = 0.33-xpad/2;
+
+h = h - 2*ysp;
+xs = 0.66;
+ys = 1 - ypad -h;
+
+m = numel(examples);
+for i=1:m
+  fprintf(['Extracting ',examples{i},'\n']);
+  % Extract parameters
+  [keys, vals] = extract_parameters(examples{i});
+
+  % Extract data
+  [episode, time, muscle_strength, Wi, We] = extract_data([examples{i},'/data.txt']);
+  motif = ds_Ia_motif(We);
+
+  plot_W_evolution(We,motif, ...
+    ys=ys,xs=xs,nhm=11,w=w,h=h,hmsp=0.005)
+
+  ys = ys - h - 3*ysp;
+  end
+
+%muscle_strengths = unique(tab{i}.opt_max_mus_str);
+%babble_prob = unique(tab{i}.sup_kwa_bab_max_pro);
+
+
+
+
+
+
+
+

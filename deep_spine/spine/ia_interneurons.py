@@ -158,8 +158,8 @@ class IaInterneuronSpine(BaseSpine):
     ):
         base_args = {
             key: ia_interneurons_kwargs.pop(key) for key in [
-                'decimation_factor',
-            ]
+                'decimation_factor', 'tag',
+            ] if key in ia_interneurons_kwargs
         }
         ia_interneurons_kwargs.pop('mechanics_filter_cutoff', None)
         super().__init__(**base_args)

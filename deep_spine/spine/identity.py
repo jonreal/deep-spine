@@ -41,6 +41,13 @@ class Identity(nn.Module):
             saturation_constant=Ia_saturation_constant,
             vel_gain=Ia_velocity_gain
         )
+        self.MN = Neuron(
+            self.n,
+            kalman_gain=kalman_gain,
+            static_leak=static_leak,
+            dynamic_leak=dynamic_leak,
+            shunt_model=shunt_model,
+        )
         self.muscle = Muscle(
             self.n,
             bias=muscle_bias,
@@ -50,7 +57,7 @@ class Identity(nn.Module):
     @torch.no_grad()
     def forward(self, features):
 
-        # Features: [length, velocity, activation]
+        # Features: [length, velocity, activation, descending_drive]
         length = features[:self.n]
         velocity = features[self.n:self.n*2]
         activation = features[self.n*2:self.n*3]
@@ -59,8 +66,11 @@ class Identity(nn.Module):
         act_II = self.II(length, activation)
         act_Ia = self.Ia(velocity, act_II, activation)
 
-        act_muscle = self.muscle(drive)
-        act_MN = torch.zeros((self.n,))
+        synaptic_activation = drive
+        open_channels = drive
+
+        act_MN = self.MN(synaptic_activation, open_channels)
+        act_muscle = self.muscle(act_MN)
 
         return act_II, act_Ia, act_MN, act_muscle
 
@@ -71,11 +81,11 @@ class IdentitySpine(BaseSpine):
     ):
         base_args = {
             key: identity_kwargs.pop(key) for key in [
-                'decimation_factor',
-            ]
+                'decimation_factor', 'tag',
+            ] if key in identity_kwargs
         }
         super().__init__(**base_args)
-        self.type = 'identity'
+        self.type = 'no-spine'
         self.kwargs = identity_kwargs
 
     def _initialize(self):

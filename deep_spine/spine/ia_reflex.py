@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Callable, Tuple
 from gymnasium import spaces
 import torch
@@ -96,6 +97,13 @@ class IaReflexSpine(BaseSpine):
         }
         super().__init__(**base_args)
         self.type = 'ia_reflex'
+        # Resolve tag: explicit kwarg takes priority, fallback to W_Ia sim_id
+        explicit_tag = iareflex_kwargs.pop('tag', '')
+        W_Ia = iareflex_kwargs.get('W_Ia')
+        if explicit_tag:
+            self.tag = explicit_tag
+        elif isinstance(W_Ia, str):
+            self.tag = f'pt_{Path(W_Ia).parent.name}'
         self.kwargs = iareflex_kwargs
 
     def _initialize(self):

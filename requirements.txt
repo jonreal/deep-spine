@@ -58,7 +58,6 @@ ordered-set==4.1.0
 packaging==24.0
 pandas==2.2.2
 patsy==0.5.6
-pillow==10.3.0
 pink-noise-rl==2.0.1
 plotnine==0.13.6
 protobuf==4.25.3

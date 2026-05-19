@@ -1,17 +1,20 @@
 #!/bin/bash
 
-LOG_DIR="./logs/rl-explore/compare"
+LOG_DIR="./logs/rl-explore-5/compare-sweep_5"
 
 mkdir -p "$LOG_DIR"
+cp "$0" "$LOG_DIR/launch-$(date +%Y%m%d-%H%M%S).sh.txt"
 export LOG_DIR
 
 format_custom_json() {
     local log_dir="$1"
-    local lr="$2"
-    local gs="$3"
-    local seed="$4"
-    local mass="$5"
-    local damp="$6"
+    local df="$2"
+    local lr="$3"
+    local gs="$4"
+    local td="$5"
+    local na="$6"
+    local ms="$7"
+    local seed="$8"
 
     cat <<EOF
 {
@@ -19,21 +22,20 @@ format_custom_json() {
   "options": {
     "seed": $seed,
     "check_points": 100,
-    "total_timesteps": 500000
+    "total_sim_steps": 10000000,
+    "eval_eps": 50
   },
   "env_kwargs": {
-    "reward_type": "simple",
-    "damping": $damp,
-    "body_mass":[0,2,1,$mass,0],
-    "pendulum_length": 0.5,
-    "relative_muscle_scale": [1, 1, 0.5, 0.5, 0.25, 0.25],
-    "muscle_strength": 1
+     "muscle_strength": $ms,
+     "reward_type": "simple"
   },
   "supraspine_kwargs": {
-    "visual_mode": "joint",
+    "decimation_factor": $df,
+    "tap_delays": $td,
     "kwargs": {
       "learning_rate": $lr,
-      "gradient_steps": $gs
+      "gradient_steps": $gs,
+      "net_arch":[$na,$na]
     }
   }
 }
@@ -42,10 +44,27 @@ EOF
 
 export -f format_custom_json
 
-parallel --delay 2 --ungroup --tag --jobs 10 '
+parallel --delay 2 --ungroup --tag --jobs 15 '
   source ../../myenv/bin/activate &&
-  JSON=$(format_custom_json "$LOG_DIR" {2} {3} {4} {5} {6}) &&
+  JSON=$(format_custom_json "$LOG_DIR" {2} {3} {4} {5} {6} {7} {8}) &&
   python run.py \
     --config {1} \
-    --custom "$JSON"
-  ' ::: p-pend-sac-eye.json p-pend-sac-ia_reflex.json ::: 1e-4 ::: 8 ::: 1 2 3 ::: 0.25 0.5 1 ::: 1 0.01
+    --custom "$JSON" \
+  ' ::: no-spine.json reflex-diag.json reflex-syn.json \
+    ::: 60 \
+    ::: 1e-3 \
+    ::: 1 2 \
+    ::: 16 \
+    ::: 32 \
+    ::: 1 \
+    ::: 1 2 3
+
+#  ' ::: ref-diag.json \
+#    ::: 20 \
+#    ::: 1e-3 \
+#    ::: 1 2 4 \
+#    ::: 0 1 2 4 8 16 ::: 32 \
+#    ::: 1 2 3
+#
+#
+#  ' ::: no-spine.json reflex-diag.json reflex-syn.json no-spine-odd.json reflex-odd.json ::: 1e-3 3e-3 ::: 2 4 ::: 1 2 3

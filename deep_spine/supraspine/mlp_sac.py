@@ -3,21 +3,30 @@ import types
 import numpy as np
 from scipy import signal
 from deep_spine.supraspine.base_supraspine import BaseSupraspine
-from deep_spine.supraspine.delay import DelayBuffer
+from deep_spine.supraspine.delay import DelayBuffer, TapBuffer
 import deep_spine.spine.filters.iir as iir
 import torch
 from stable_baselines3 import SAC
 from gymnasium import spaces
 
 
-def _make_filter(spec, shape):
-    """Build an IirBatch from a filter spec dict, or return None.
+def _make_filter(spec, shape, decimation_factor=1):
+    """Build an anti-aliasing IIR low-pass filter, or return None.
 
-    spec: {'order': 1, 'cutoff': 0.1, 'type': 'low'} or None/0/{}
+    spec:
+      'on' or True  — Butterworth order-1, cutoff = 1/decimation_factor (Nyquist of brain rate)
+      'off', False, None, [] — no filter
+      {'order': N}  — same auto cutoff, custom order
     """
-    if not spec:
+    if spec is None or spec == 'off' or spec is False or spec == []:
         return None
-    b, a = signal.butter(spec['order'], spec['cutoff'], spec['type'])
+    if decimation_factor <= 1:
+        return None  # no aliasing possible at decimation=1
+    order = 1
+    if isinstance(spec, dict):
+        order = spec.get('order', 1)
+    cutoff = 1.0 / decimation_factor
+    b, a = signal.butter(order, cutoff, 'low')
     return iir.IirBatch(b, a, shape)
 
 
@@ -31,11 +40,12 @@ class MlpSAC(BaseSupraspine):
         proprio_delay_steps = 0,
         visual_delay_steps = 0,
         action_delay_steps = 0,
-        proprio_filter = None,
-        visual_filter = None,
-        action_filter = None,
+        proprio_filter = 'on',
+        visual_filter = 'on',
+        action_filter = 'off',
         perception_mode = 'proprio-visual',
         visual_mode = 'joint',
+        tap_delays: int = 0,
         seed= 12345
     ):
 
@@ -51,15 +61,13 @@ class MlpSAC(BaseSupraspine):
 
         self.perception_mode = perception_mode
         self.visual_mode = visual_mode
+        self.tap_delays = tap_delays
         self.proprio_delay = proprio_delay_steps;
         self.visual_delay = visual_delay_steps;
         self.action_delay = action_delay_steps;
         self.proprio_filter_spec = proprio_filter;
         self.visual_filter_spec = visual_filter;
         self.action_filter_spec = action_filter;
-
-
-
 
 
     def _update_perception(self):
@@ -101,10 +109,21 @@ class MlpSAC(BaseSupraspine):
         self.action[:] = self.action_buffer.sample()
         return self.action
 
+    def set_action_init(self, d):
+        """Re-seed the action buffer with equilibrium drive d."""
+        d = np.asarray(d, dtype=float)
+        self.action[:] = d
+        self.action_buffer.init_value = d.copy()
+        self.action_buffer.reset()
+
     def sample(self):
         if self.perception_mode == 'visual-only':
-            return self.visual.copy()
-        return np.concatenate((self.proprio, self.visual))
+            obs = self.visual.copy()
+        else:
+            obs = np.concatenate((self.proprio, self.visual))
+        if self.tap_delays > 0:
+            return self.tap_buffer.push_and_get(obs)
+        return obs
 
     def update_seed(self, seed):
         self.rng = np.random.default_rng(int(seed))
@@ -124,35 +143,37 @@ class MlpSAC(BaseSupraspine):
         visual_high = np.array([np.pi, 5*np.pi], dtype=np.float32)
 
         if self.perception_mode == 'visual-only':
-            self.env.observation_space = spaces.Box(
-                low=visual_low, high=visual_high, dtype=np.float32
-            )
+            obs_low  = visual_low
+            obs_high = visual_high
         else:
-            self.env.observation_space = spaces.Box(
-                low=np.concatenate((
-                    np.zeros(self.n, dtype=np.float32), visual_low
-                )),
-                high=np.concatenate((
-                    np.ones(self.n, dtype=np.float32), visual_high
-                )),
-                dtype=np.float32
-            )
+            obs_low  = np.concatenate((np.zeros(self.n, dtype=np.float32), visual_low))
+            obs_high = np.concatenate((np.ones(self.n, dtype=np.float32), visual_high))
             self.proprio_buffer = DelayBuffer(
                 self.proprio_delay, init_value=np.zeros(self.n)
-            );
+            )
             self.proprio_filter = _make_filter(
-                self.proprio_filter_spec, (self.n,))
+                self.proprio_filter_spec, (self.n,), self.decimation_factor)
 
         self.visual_buffer = DelayBuffer(
             self.visual_delay, init_value=np.zeros(2)
-        );
-        self.visual_filter = _make_filter(self.visual_filter_spec, (2,))
+        )
+        self.visual_filter = _make_filter(
+            self.visual_filter_spec, (2,), self.decimation_factor)
 
         self.action_buffer = DelayBuffer(
             self.action_delay, init_value=np.zeros(self.n)
-        );
+        )
         self.action_filter = _make_filter(
-            self.action_filter_spec, (self.n,))
+            self.action_filter_spec, (self.n,), self.decimation_factor)
+
+        if self.tap_delays > 0:
+            self.tap_buffer = TapBuffer(self.tap_delays, len(obs_low))
+            obs_low  = np.tile(obs_low,  self.tap_delays + 1)
+            obs_high = np.tile(obs_high, self.tap_delays + 1)
+
+        self.env.observation_space = spaces.Box(
+            low=obs_low, high=obs_high, dtype=np.float32
+        )
 
         if self.checkpoint:
             path = self._resolve_checkpoint(self.checkpoint)
@@ -176,7 +197,7 @@ class MlpSAC(BaseSupraspine):
         print('--- SAC Controller ---')
         print(f'  perception:  {self.perception_mode}')
         print(f'  visual_mode: {self.visual_mode}')
-        print(f'  obs_dim:     {self.env.observation_space.shape[0]}')
+        print(f'  obs_dim:     {self.env.observation_space.shape[0]}  (tap_delays={self.tap_delays})')
         print(f'  act_dim:     {self.env.action_space.shape[0]}')
         print(f'  net_arch:    {self.model.policy_kwargs.get("net_arch", "default")}')
         print(f'  lr:          {self.model.learning_rate}')

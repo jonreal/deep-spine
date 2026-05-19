@@ -1,4 +1,5 @@
 import sys, os, pickle, time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import torch
 import pandas as pd
@@ -33,49 +34,74 @@ def df_to_mat_table(df, filename):
                 grp.create_dataset(col, data=arr)
 
 
+def _read_event_file(event_path, model_str, tag_prefix=('eps/', 'eval/')):
+    """Read a single TensorBoard event file and return list of DataFrames.
+
+    tag_prefix: string or tuple of strings — only include tags starting with
+                any of these prefixes. Set to None or '' to include all tags.
+    """
+    dfs = []
+    event_acc = EventAccumulator(event_path)
+    event_acc.Reload()
+    if 'scalars' in event_acc.Tags():
+        model = model_str.split('-')
+        model_suffix = '-'.join(model[1:])
+        for tag in event_acc.Tags()['scalars']:
+            if tag_prefix and not tag.startswith(tag_prefix):
+                continue
+            data = event_acc.Scalars(tag)
+            df = pd.DataFrame(
+                data=[(s.step, s.value) for s in data],
+                columns=['Step', 'Value']
+            )
+            df['Tag'] = tag
+            df['ModelID'] = model_str
+            df['Model'] = model_suffix
+            dfs.append(df)
+    return dfs
+
+
 def training_logs_to_dataframe(
         path_list,
         savefile=None,
-        h5_file=None
+        h5_file='auto',
+        max_workers=16,
+        tag_prefix=('eps/', 'eval/')
     ):
+    if h5_file == 'auto':
+        h5_file = os.path.join(os.path.abspath(path_list[0]), 'df.h5')
     logpath_list = [os.path.abspath(f'{p}/tb') for p in path_list]
-    agentpath_list = [os.path.abspath(f'{p}') for p in path_list]
-    all_data = []
-    t_read = time.time()
-    n_events = 0
+
+    # Collect all (event_file, model_str) pairs
+    tasks = []
     for l in logpath_list:
         for f in os.listdir(l):
             subdir_path = os.path.join(l, f)
-            if os.path.isdir(subdir_path):
-                for sf in os.listdir(subdir_path):
-                    subsubdir_path = os.path.join(subdir_path, sf)
-                    if os.path.isdir(subsubdir_path):
-                        events = (
-                            [os.path.join(subsubdir_path, f)
-                            for f in os.listdir(subsubdir_path)
-                                if 'tfevents' in f]
-                        )
-                    for event in events:
-                        event_acc = EventAccumulator(event)
-                        event_acc.Reload()
-                        n_events += 1
-                        if 'scalars' in event_acc.Tags():
-                            scalar_tags = event_acc.Tags()['scalars']
-                            for tag in scalar_tags:
-                                data = event_acc.Scalars(tag)
-                                df = pd.DataFrame(
-                                    data=[(s.step, s.value) for s in data],
-                                    columns=['Step', 'Value']
-                                )
-                                model_str = os.path.basename(subdir_path)
-                                model = model_str.split('-')
+            if not os.path.isdir(subdir_path):
+                continue
+            model_str = os.path.basename(subdir_path)
+            for sf in os.listdir(subdir_path):
+                subsubdir_path = os.path.join(subdir_path, sf)
+                if os.path.isdir(subsubdir_path):
+                    for ef in os.listdir(subsubdir_path):
+                        if 'tfevents' in ef:
+                            tasks.append((
+                                os.path.join(subsubdir_path, ef),
+                                model_str
+                            ))
 
-                                df['Tag'] = tag
-                                df['ModelID'] = model_str
-                                df['Model'] = '-'.join(model[1:])
-                                all_data.append(df)
+    print(f'Found {len(tasks)} event files, reading with {max_workers} workers...')
+    t_read = time.time()
+    all_data = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(_read_event_file, path, ms, tag_prefix): path
+            for path, ms in tasks
+        }
+        for future in as_completed(futures):
+            all_data.extend(future.result())
 
-    print(f'[{time.time()-t_read:.2f}s] read {n_events} event files -> {len(all_data)} dfs')
+    print(f'[{time.time()-t_read:.2f}s] read {len(tasks)} event files -> {len(all_data)} dfs')
     t0 = time.time()
     df = pd.concat(all_data, ignore_index=True)
     print(f'[{time.time()-t0:.2f}s] concat ({len(df)} rows)')

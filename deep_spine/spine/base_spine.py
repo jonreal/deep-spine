@@ -38,8 +38,10 @@ class BaseSpine:
     def __init__(
         self,
         decimation_factor = 1,
+        tag = '',
     ):
         self.decimation_factor = decimation_factor
+        self.tag = tag
         self.simulation_frame_count = 1
         self.learners = []
 

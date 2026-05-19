@@ -71,8 +71,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run deep spine simulation with default and custom configs."
     )
-    parser.add_argument('--config', required=True,
+    parser.add_argument('--config', default=None,
         help="Path to default config JSON file."
+    )
+    parser.add_argument('--continue', dest='continue_path', default=None,
+        metavar='SIM_DIR',
+        help="Continue training from a previous sim directory."
     )
     parser.add_argument('--custom', type=parse_json_or_path, default=None,
         help="Path to custom override JSON file (e.g. for options)."
@@ -85,6 +89,9 @@ def main():
         help="Enable rendering at 10 fps.")
     args = parser.parse_args()
 
+    if args.continue_path is None and args.config is None:
+        parser.error("one of --config or --continue is required")
+
     # --show injects frame_rate into custom config
     if args.show:
         show_override = {"env_kwargs": {"frame_rate": 10}}
@@ -93,12 +100,33 @@ def main():
         else:
             recursive_update(args.custom, show_override)
 
-    # Load the default configuration and custom settings
-    with open(args.config, 'r') as f:
-        config = json.load(f)
+    # Load config: from --continue sim dir or --config file
+    if args.continue_path is not None:
+        sim_dir = Path(args.continue_path).resolve()
+        with open(sim_dir / 'config.json') as f:
+            config = json.load(f)
+
+        # Redirect log_dir to a -continue sibling directory
+        config['log_dir'] = str(sim_dir.parent) + '-continue'
+
+        # Find latest checkpoint
+        model_dir = sim_dir / 'model'
+        checkpoints = sorted(
+            model_dir.glob('*.zip'), key=lambda p: int(p.stem)
+        )
+        if not checkpoints:
+            raise FileNotFoundError(f"No checkpoints found in {model_dir}")
+        latest_ckpt = str(checkpoints[-1])
+        config['supraspine_kwargs']['checkpoint'] = latest_ckpt
+        config['parent_sim_id'] = sim_dir.name
+        print(f'  Continuing from: {sim_dir.name}  checkpoint: {Path(latest_ckpt).name}')
+    else:
+        with open(args.config, 'r') as f:
+            config = json.load(f)
+
     if args.custom:
         changed = recursive_update(config, args.custom)
-        if not changed:
+        if not changed and args.continue_path is None:
             raise ValueError(
                 f"[config error] custom config '{args.custom}' had no effect")
 
@@ -153,6 +181,8 @@ def main():
         'supraspine_kwargs': supraspine_kwargs,
         'hebbian_kwargs': hebbian_kwargs,
     }
+    if args.continue_path is not None:
+        all_args['parent_sim_id'] = config.get('parent_sim_id')
     with open(os.path.join(log_dir, 'config.json'), 'w') as f:
         json.dump(convert_to_serializable(all_args), f, indent=4)
 
@@ -205,12 +235,27 @@ def main():
 
     # Auto-generate tensorboard log dir for RL modes (after set_learners for type tag)
     if supraspine_type in ('PPO', 'SAC'):
-        custom_for_tag = {k: v for k, v in (args.custom or {}).items()
-                         if k not in ("log_dir", "options")}
+        if args.continue_path is not None:
+            # Use parent sim_id as prefix and reconstruct original custom tag
+            # so continued runs group correctly with their sweep siblings
+            tb_prefix = config.get('parent_sim_id', sim_id)
+            parent_custom_txt = Path(args.continue_path) / 'custom.txt'
+            if parent_custom_txt.exists():
+                parent_custom = parse_json_or_path(str(parent_custom_txt))
+                custom_for_tag = {k: v for k, v in parent_custom.items()
+                                  if k not in ("log_dir", "options")}
+            else:
+                custom_for_tag = {}
+        else:
+            tb_prefix = sim_id
+            custom_for_tag = {k: v for k, v in (args.custom or {}).items()
+                              if k not in ("log_dir", "options")}
+
         custom_tag = build_tb_tag(custom_for_tag)
         tag_str = f"-{custom_tag}" if custom_tag else ""
+        spine_label = f'{spine.type}_{spine.tag}' if spine.tag else spine.type
         supraspine.model.tensorboard_log = (
-            f'{root_log_dir}/tb/{sim_id}-{spine.type}{tag_str}'
+            f'{root_log_dir}/tb/{tb_prefix}-{spine_label}{tag_str}'
         )
 
     # Set up visualizations from config
@@ -263,8 +308,11 @@ def main():
                 mdir = f'./{log_dir}/model'
                 os.makedirs(mdir, exist_ok=True)
                 check_points = options.get("check_points",1)
-                total_timesteps = options.get("total_timesteps",1000)
-                steps_per_check = int(total_timesteps / check_points)
+                total_sim_steps = options.get("total_sim_steps", 1000)
+                total_supraspine_steps = total_sim_steps // supraspine.decimation_factor
+                steps_per_check = total_supraspine_steps // check_points
+                print(f'  total_sim_steps: {total_sim_steps}  →  '
+                      f'supraspine_steps: {total_supraspine_steps}')
                 prev_total_steps = 0
                 tb_mov_ave_eps_win = 10
 
@@ -273,6 +321,10 @@ def main():
                     window=tb_mov_ave_eps_win
                 )
 
+                eval_eps  = options.get("eval_eps", 0)
+                eval_seed = options.get("eval_seed", 42)
+
+                tinit = time.time()
                 for i in range(check_points):
                     tstart = time.time()
                     print(f'{sim_id}: iteration {i+1}/{check_points}:')
@@ -291,7 +343,48 @@ def main():
                     nsteps =  total_steps - prev_total_steps
                     prev_total_steps = total_steps
                     print(f'sim-steps per sec: {nsteps / (tend - tstart):.1f}')
+
+                    if eval_eps > 0:
+                        print('\t--- Eval ---')
+                        last_obs       = supraspine.model._last_obs.copy()
+                        last_ep_starts = supraspine.model._last_episode_starts.copy()
+                        ic_rng_state   = env.ic_rng.bit_generator.state
+                        solved_before  = env.solved
+                        eps_before     = env.eps
+
+                        env.logging_enabled = False
+                        env.ic_rng = np.random.default_rng(eval_seed)
+                        obs, _ = env.reset()
+                        ep_rews = []
+                        for _ in range(eval_eps):
+                            done = truncated = False
+                            while not (done or truncated):
+                                action = supraspine.predict(obs)
+                                obs, reward, done, truncated, info = env.step(action)
+                            ep_rews.append(env.ep_reward)
+                            obs, _ = env.reset()
+
+                        step = supraspine.model.num_timesteps
+                        tensorboard_callback.logger.record("eval/mean_rew", np.mean(ep_rews))
+                        tensorboard_callback.logger.record("eval/n_perfect", env.solved - solved_before)
+                        tensorboard_callback.logger.dump(step)
+                        print(f'  eval ({eval_eps} eps): mean_rew={np.mean(ep_rews):.1f}  '
+                              f'n_perfect={env.solved - solved_before}')
+
+                        env.solved                        = solved_before
+                        env.eps                           = eps_before
+                        env.ic_rng.bit_generator.state    = ic_rng_state
+                        env.logging_enabled = True
+                        obs, _ = env.reset()
+                        supraspine.model._last_obs        = last_obs
+                        supraspine.model._last_episode_starts = last_ep_starts
+
                     print('---\n\n')
+
+                print('\n---\n')
+                print(f'Total sim time: {(tend - tinit):.1f} (sec), '
+                      f'({(tend - tinit) / 60:.1f} min)')
+                print('\n---\n')
 
             else:
                 # Forward sim — deterministic policy evaluation

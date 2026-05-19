@@ -22,11 +22,13 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self,
         path_to_log: Optional[str] = None,
         task: Optional[str] = 'balance',
+        ic_type: Optional[str] = 'joints_only',
         reward_type: Optional[str] = 'simple',
-        max_time = 300,
+        max_time = 30,
         min_time = 10,
-        q0min = -np.pi/8*np.ones(2,),
-        q0max = np.pi/8*np.ones(2,),
+        qmin = -np.pi/8*np.ones(2,),
+        qmax = np.pi/8*np.ones(2,),
+        pmax = np.pi/4,
         spine: Optional[Any] = None,
         supraspine: Optional[Any] = None,
         damping = 1,
@@ -106,14 +108,25 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.supraspine = self.initialize_supraspine(supraspine)
 
         self.task = task
+        _valid_ic_types = ('pend_only', 'joints_only')
+        if ic_type not in _valid_ic_types:
+            raise ValueError(f"ic_type={ic_type!r} not in {_valid_ic_types}")
+        self.ic_type = ic_type
+        _valid_reward_types = ('simple', 'simple-gauss', 'log', 'integral',
+                               'integral-gauss', 'gauss',
+                               'vel-angle', 'simple-vel-angle')
+        if reward_type not in _valid_reward_types:
+            raise ValueError(f"reward_type={reward_type!r} not in {_valid_reward_types}")
         self.reward_type = reward_type
-        self.q0min = q0min
-        self.q0max = q0max
+        self.qmin = qmin
+        self.qmax = qmax
+        self.pmax = pmax
 
         self.done = False
         self.terminated = False
         self.truncated = False
 
+        self.logging_enabled = True
         self.eps = 1
         self.reward = 0
         self.seed = seed
@@ -122,12 +135,15 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         # IC logging
         self.current_ic_q0 = 0.0
         self.current_ic_q1 = 0.0
+        self.current_ic_pend = 0.0
         self.log_ic_q0 = 0.0
         self.log_ic_q1 = 0.0
+        self.log_ic_pend = 0.0
 
         # Final condition logging
         self.log_fc_q0 = 0.0
         self.log_fc_q1 = 0.0
+        self.log_fc_q2 = 0.0
         self.log_fc_pend = 0.0
 
         self.min_time = min_time
@@ -156,12 +172,19 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         print('\n--- Environment Properties ---')
         print(f'Model: {xml_path}')
         print(f'Reward type: {self.reward_type}')
+        print(f'IC type:     {self.ic_type}')
+        print(f'pmax:        {self.pmax:.4f} rad ({np.degrees(self.pmax):.1f} deg)')
+        print(f'qmin:        {self.qmin}')
+        print(f'qmax:        {self.qmax}')
+        print(f'min_time:    {self.min_time} s')
+        print(f'max_time:    {self.max_time} s')
         print('body_mass: ', self.model.body_mass)
         print('body inertia: ', self.model.body_inertia)
         print('pendulum length: ', pendulum_length)
         print(f'gravity: {self.model.opt.gravity}')
         print(f'viscosity: {self.model.opt.viscosity}')
-        print(f'damping: {self.model.dof_damping}\n')
+        print(f'damping: {self.model.dof_damping}')
+        print(f'muscle_strength: {self.muscle_strength}\n')
         print('Muscle Normalization:')
         print('L0: ', self.spine.L0)
         print('lmin: ', self.spine.lmin)
@@ -222,11 +245,14 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         return supraspine
 
     def _update_eps_log(self):
+        if not self.logging_enabled:
+            return
         self.log_eps += 1
         self.log_eps_len = self.data.time
         self.log_eps_reward = self.ep_reward
         self.log_ic_q0 = self.current_ic_q0
         self.log_ic_q1 = self.current_ic_q1
+        self.log_ic_pend = self.current_ic_pend
         self.log_fc_q0 = self.data.qpos[0]
         self.log_fc_q1 = self.data.qpos[1]
         self.log_fc_pend = np.sum(self.data.qpos) % (2*np.pi) - np.pi
@@ -242,22 +268,36 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         mujoco.mj_resetData(self.model, self.data)
 
         if self.task == 'balance':
-            self.data.qpos[0] = (
-                self.ic_rng.uniform(self.q0min[0],self.q0max[0])
-            )
-            self.data.qpos[1] = (
-                self.ic_rng.uniform(self.q0min[1],self.q0max[1])
-            )
-            self.data.qpos[2] = np.pi - self.data.qpos[0] - self.data.qpos[1]
+            self.inverted_flag = True
+            if self.ic_type == 'pend_only':
+                self.data.qpos[0] = 0.0
+                self.data.qpos[1] = 0.0
+                self.data.qpos[2] = (
+                    self.ic_rng.uniform(-self.pmax,self.pmax) - np.pi
+                )
+            elif self.ic_type == 'joints_only':
+                self.data.qpos[0] = (
+                    self.ic_rng.uniform(self.qmin[0],self.qmax[0])
+                )
+                self.data.qpos[1] = (
+                    self.ic_rng.uniform(self.qmin[1],self.qmax[1])
+                )
+                self.data.qpos[2] = (
+                    np.pi - self.data.qpos[0] - self.data.qpos[1]
+                )
         else:
             self.data.qpos[0:3] = np.zeros(3,)
             self.data.qvel = np.zeros(3,)
 
+        self.pendulum_pos = np.sum(self.data.qpos) % (2*np.pi) - np.pi
+
         # Cache IC for logging
         self.current_ic_q0 = self.data.qpos[0]
         self.current_ic_q1 = self.data.qpos[1]
+        self.current_ic_pend = self.pendulum_pos
 
         mujoco.mj_forward(self.model, self.data)
+
         self.obs = self.supraspine.sample()
 
         self.simulation_steps = 0
@@ -269,13 +309,13 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
         # Entering inverted state (0 = balanced, ±pi = hanging)
         if (not self.inverted_flag
-                and abs(self.pendulum_pos) <= np.pi/4):
+                and abs(self.pendulum_pos) <= self.pmax):
           self.inverted_flag = True
           self.t0 = self.data.time
 
         # Check fail or solved
         if self.inverted_flag:
-            out_of_bounds = abs(self.pendulum_pos) > np.pi/4
+            out_of_bounds = abs(self.pendulum_pos) > self.pmax
             time_exceeded_while_inverted = (
                 (self.data.time - self.t0) > self.max_time
             )
@@ -299,8 +339,8 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
     def _update_reward(self):
 
         mu = 0
-        sig = np.pi/16
-        scale = 10
+        sig = np.pi/8
+        scale = 1
         fgauss = 0
         #if not self.done:
         #    if (self.task == 'swing-up'):
@@ -316,18 +356,33 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         #    -np.power(self.pendulum_pos-mu, 2.)/(2*np.power(sig, 2.)))
         #)
         if self.reward_type == 'simple':
-            ftimeint = self.inverted_flag - (not self.inverted_flag)
+            rew = self.inverted_flag - (not self.inverted_flag)
         elif self.reward_type == 'simple-gauss':
-            fgauss = np.exp(-0.5 * ((self.pendulum_pos - mu)/sig)**2) / scale
-            ftimeint = self.inverted_flag - (not self.inverted_flag)
+            rew = (
+                np.exp(-0.5 * ((self.pendulum_pos - mu)/sig)**2) / scale
+                + (self.inverted_flag - (not self.inverted_flag))
+            )
+        elif self.reward_type == 'gauss':
+            rew = np.exp(-0.5 * ((self.pendulum_pos - mu)/sig)**2) / scale
+        elif self.reward_type == 'integral-gauss':
+            rew = (
+                np.exp(-0.5 * ((self.pendulum_pos - mu)/sig)**2) / scale
+                + self.inverted_flag * (self.data.time - self.t0)
+            )
         elif self.reward_type == 'log':
-            ftimeint = self.inverted_flag*(np.log(1 + (self.data.time - self.t0)))
+            rew = self.inverted_flag*(np.log(1 + (self.data.time - self.t0)))
         elif self.reward_type == 'integral':
-            ftimeint = self.inverted_flag*(self.data.time - self.t0)
-        else:
-            print(f'{self.reward_type} not found')
-
-        self.reward += (fgauss + ftimeint)/self.simulation_sampling_rate
+            rew = self.inverted_flag*(self.data.time - self.t0)
+        elif self.reward_type == 'vel-angle':
+            gate     = float(self.pendulum_vel * self.pendulum_pos <= 0)
+            rew = (1 - abs(self.pendulum_pos) / np.pi) * gate
+        elif self.reward_type == 'simple-vel-angle':
+            gate     = float(self.pendulum_vel * self.pendulum_pos <= 0)
+            rew = (
+                (1 - abs(self.pendulum_pos) / np.pi) * gate
+                + (self.inverted_flag - (not self.inverted_flag))
+            )
+        self.reward += rew/self.simulation_sampling_rate
 
 
     def step(self, action):
@@ -341,21 +396,14 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
         # Step physics forward decimated number of loops
         for steps in range(self.supraspine.decimation_factor):
-
             mujoco.mj_step(self.model, self.data)
 
-            # World-frame pendulum angle, 0 = inverted (balanced)
             self.pendulum_pos = np.sum(self.data.qpos) % (2*np.pi) - np.pi
             self.pendulum_vel = np.sum(self.data.qvel)
 
             self._render()
             self._update_figures()
             self._update_status()
-
-            # Stop mid decimation if needed
-            if self.done:
-                break
-
             self._update_reward()
 
             self.supraspine.update()
@@ -363,10 +411,11 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
             self.simulation_steps += 1
 
+            if self.done:
+                break
 
         self.ep_reward += self.reward
         self.obs = self.supraspine.sample()
-
         info = {}
 
         return self.obs, self.reward, self.terminated, self.truncated, info
@@ -392,7 +441,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
     def _write_data_to_logfile(self):
         if self.logfile:
             data = np.concatenate([
-                np.array([self.eps]),
+                n.array([self.eps]),
                 np.array([self.data.time]),
                 self.data.qpos,
                 self.data.qvel,
@@ -434,10 +483,12 @@ class LogCallbackArm26Pendulum(BaseCallback):
                     0
                 )
             self.logger.record("eps/ep_rew", self.env.log_eps_reward)
+            self.logger.record("eps/ep_len", self.env.log_eps_len)
             self.logger.record("eps/eps", self.env.log_eps)
             self.logger.record("eps/solved", self.env.solved)
             self.logger.record("eps/ic_q0", self.env.log_ic_q0)
             self.logger.record("eps/ic_q1", self.env.log_ic_q1)
+            self.logger.record("eps/ic_pend", self.env.log_ic_pend)
             self.logger.record("eps/fc_q0", self.env.log_fc_q0)
             self.logger.record("eps/fc_q1", self.env.log_fc_q1)
             self.logger.record("eps/fc_pend", self.env.log_fc_pend)
