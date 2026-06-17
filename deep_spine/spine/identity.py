@@ -85,7 +85,7 @@ class IdentitySpine(BaseSpine):
             ] if key in identity_kwargs
         }
         super().__init__(**base_args)
-        self.type = 'no-spine'
+        self.type = 'no_spine'
         self.kwargs = identity_kwargs
 
     def _initialize(self):

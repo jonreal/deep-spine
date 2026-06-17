@@ -26,7 +26,6 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         reward_type: Optional[str] = 'simple',
         max_time = 30,
         min_time = 10,
-        qmin = -np.pi/8*np.ones(2,),
         qmax = np.pi/8*np.ones(2,),
         pmax = np.pi/4,
         spine: Optional[Any] = None,
@@ -118,8 +117,8 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         if reward_type not in _valid_reward_types:
             raise ValueError(f"reward_type={reward_type!r} not in {_valid_reward_types}")
         self.reward_type = reward_type
-        self.qmin = qmin
         self.qmax = qmax
+        self.qmin = -self.qmax
         self.pmax = pmax
 
         self.done = False
@@ -174,8 +173,7 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         print(f'Reward type: {self.reward_type}')
         print(f'IC type:     {self.ic_type}')
         print(f'pmax:        {self.pmax:.4f} rad ({np.degrees(self.pmax):.1f} deg)')
-        print(f'qmin:        {self.qmin}')
-        print(f'qmax:        {self.qmax}')
+        print(f'qmax:        {self.qmax}  (qmin = -qmax)')
         print(f'min_time:    {self.min_time} s')
         print(f'max_time:    {self.max_time} s')
         print('body_mass: ', self.model.body_mass)

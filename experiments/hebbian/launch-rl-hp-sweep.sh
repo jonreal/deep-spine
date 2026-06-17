@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOG_DIR="./logs/rl-explore-5/compare-sweep_5"
+LOG_DIR="./logs/rl-explore-5/compare-sweep_mass_8"
 
 mkdir -p "$LOG_DIR"
 cp "$0" "$LOG_DIR/launch-$(date +%Y%m%d-%H%M%S).sh.txt"
@@ -14,7 +14,8 @@ format_custom_json() {
     local td="$5"
     local na="$6"
     local ms="$7"
-    local seed="$8"
+    local pm="$8"
+    local seed="$9"
 
     cat <<EOF
 {
@@ -22,12 +23,14 @@ format_custom_json() {
   "options": {
     "seed": $seed,
     "check_points": 100,
-    "total_sim_steps": 10000000,
+    "total_sim_steps": 15000000,
     "eval_eps": 50
   },
   "env_kwargs": {
      "muscle_strength": $ms,
-     "reward_type": "simple"
+     "reward_type": "gauss",
+     "body_mass": [0, 2, 1, $pm, 0],
+     "damping": [0, 0, 1]
   },
   "supraspine_kwargs": {
     "decimation_factor": $df,
@@ -46,17 +49,18 @@ export -f format_custom_json
 
 parallel --delay 2 --ungroup --tag --jobs 15 '
   source ../../myenv/bin/activate &&
-  JSON=$(format_custom_json "$LOG_DIR" {2} {3} {4} {5} {6} {7} {8}) &&
+  JSON=$(format_custom_json "$LOG_DIR" {2} {3} {4} {5} {6} {7} {8} {9}) &&
   python run.py \
     --config {1} \
     --custom "$JSON" \
-  ' ::: no-spine.json reflex-diag.json reflex-syn.json \
-    ::: 60 \
+  ' ::: no-spine.json reflex-diag.json \
+    ::: 40 \
     ::: 1e-3 \
     ::: 1 2 \
     ::: 16 \
     ::: 32 \
     ::: 1 \
+    ::: 0.5 1 2 \
     ::: 1 2 3
 
 #  ' ::: ref-diag.json \

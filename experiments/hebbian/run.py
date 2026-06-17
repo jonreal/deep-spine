@@ -137,11 +137,16 @@ def main():
     local_time = time.localtime(now)
     sim_id = int(now)
 
-    log_dir = os.path.join(
-        root_log_dir,
-        f'{sim_id}'
-    )
-    os.makedirs(log_dir, exist_ok=True)
+    # Run dirs are named by integer-second timestamp; under parallel launches
+    # two jobs can hit the same second. Bump to the next free id instead of
+    # clobbering (makedirs without exist_ok fails atomically if taken).
+    while True:
+        log_dir = os.path.join(root_log_dir, f'{sim_id}')
+        try:
+            os.makedirs(log_dir)
+            break
+        except FileExistsError:
+            sim_id += 1
 
     logf = open(os.path.join(log_dir, "runtime.log"), "a", buffering=1)
     sys.stdout = Tee(sys.stdout, logf)
