@@ -25,11 +25,26 @@
       limited="true" range="-120 120"
       damping="1"
     />
+
+
+    <!-- Original
     <muscle
       scale="200" ctrllimited="true" ctrlrange="0 1"
       range="0.7 1.5"
       lmin="0.7" lmax="1.5"
     />
+    -->
+
+    <!-- force>=0 sets peak force F0 directly (N); MuJoCo then ignores `scale`
+         and does NOT auto-size F0 = scale/acc0, so F0 is decoupled from limb
+         inertia (body_mass). F0 is scaled at runtime by muscle_strength and
+         relative_muscle_scale in arm26_babble.py. `scale` is now unused. -->
+    <muscle
+      scale="200" force="240" ctrllimited="true" ctrlrange="0 1"
+      range="0.6 1.4"
+      lmin="0.6" lmax="1.4"
+    />
+
   </default>
 
   <asset>

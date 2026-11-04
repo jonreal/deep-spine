@@ -65,6 +65,42 @@ VIZ_GEOMS = {
 }
 
 
+def build_strength_schedule(s0, s_max, n_eps, shape, ramp_fraction=0.8):
+    """Per-episode muscle strength: ramp s0 -> s_max over the first
+    ``ramp_fraction`` of episodes, then hold at s_max.
+
+    Episode ``i`` runs at ``schedule[i]``; ``schedule[R] == s_max`` (R =
+    round(ramp_fraction * n_eps)) and it holds at s_max thereafter.
+
+    ``shape`` sets the ramp curvature:
+      - "geometric": multiplicative s0*(s_max/s0)**(i/R). Reproduces the legacy
+        per-episode multiply with muscle_increase_factor == (s_max/s0)**(1/R).
+      - "linear"/"concave"/"convex" or a numeric exponent p: power law
+        s0 + (s_max-s0)*(i/R)**p  (p<1 concave = reaches move-strength sooner,
+        p=1 linear, p>1 convex). Aliases: linear=1, concave=0.5, convex=2.
+    """
+    R = max(1, int(round(ramp_fraction * n_eps)))
+    sched = np.full(n_eps, float(s_max))
+    r = np.arange(min(R, n_eps))
+    frac = r / R
+    if isinstance(shape, str) and shape.lower() == "geometric":
+        if s0 <= 0:
+            raise ValueError(
+                "geometric strength schedule requires muscle_strength (s0) > 0"
+            )
+        sched[:len(r)] = s0 * (s_max / s0) ** frac
+    else:
+        aliases = {"linear": 1.0, "concave": 0.5, "convex": 2.0}
+        if isinstance(shape, str):
+            p = aliases.get(shape.lower())
+            if p is None:
+                p = float(shape)   # allow a numeric string like "0.75"
+        else:
+            p = float(shape)
+        sched[:len(r)] = s0 + (s_max - s0) * frac ** p
+    return sched
+
+
 def main():
 
     # Parse args
@@ -304,6 +340,21 @@ def main():
     muscle_strength = env.muscle_strength[0]
     muscle_increase_factor = options.get("muscle_increase_factor", 1.1)
     max_muscle_strength = options.get("max_muscle_strength", 1.0)
+    # Optional per-episode strength schedule. When "strength_shape" is present
+    # it overrides the legacy multiplicative ramp; absent, behavior is unchanged.
+    strength_shape = options.get("strength_shape", None)
+    strength_schedule = None
+    if strength_shape is not None:
+        ramp_fraction = options.get("ramp_fraction", 0.8)
+        strength_schedule = build_strength_schedule(
+            muscle_strength, max_muscle_strength,
+            options.get("num_eps", 50), strength_shape, ramp_fraction,
+        )
+        print(
+            f'strength schedule: shape={strength_shape} '
+            f'ramp_fraction={ramp_fraction} '
+            f's0={muscle_strength:.4g} -> s_max={max_muscle_strength:.4g}'
+        )
 
     try:
         if supraspine_type in ('PPO', 'SAC'):
@@ -457,10 +508,15 @@ def main():
                         last_write_time = current_time
                 tend = time.time()
                 env.reset()
-                muscle_strength = np.clip(
-                    muscle_strength * muscle_increase_factor,
-                    0, max_muscle_strength
-                )
+                if strength_schedule is not None:
+                    nxt = i + 1
+                    if nxt < len(strength_schedule):
+                        muscle_strength = float(strength_schedule[nxt])
+                else:
+                    muscle_strength = np.clip(
+                        muscle_strength * muscle_increase_factor,
+                        0, max_muscle_strength
+                    )
                 env.set_muscle_strength(muscle_strength)
                 print(f'sim-steps per sec: {steps_per_eps / (tend - tstart):.1f}')
                 print(f'sim-secs per sec: {env.episode_length / (tend - tstart):.1f}')

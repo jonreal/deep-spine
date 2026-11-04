@@ -15,9 +15,11 @@ function [keys, vals] = extract_parameters(path)
     % Recursively extract all leaf parameter keys and values
     leaves = extract_leaves(p);
 
-    % Truncate each section of keys to 3 characters
+    % Truncate each section of keys to 3 characters. Clamp the cut position to
+    % the token length so parts shorter than 3 chars (e.g. "Ia", "II") are kept
+    % whole instead of erroring in extractBefore.
     short_keys = cellfun(@(s) join( ...
-        cellfun(@(p) extractBefore(p, 4), split(s, "_"), ...
+        cellfun(@(p) extractBefore(p, min(strlength(p) + 1, 4)), split(s, "_"), ...
         'UniformOutput', false), "_"), ...
         leaves(:,1), 'UniformOutput', false);
 

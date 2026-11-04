@@ -1,5 +1,9 @@
-load(['../../experiments/hebbian/logs/',...
+load(['../experiments/hebbian/logs/legacy/',...
     'exp9/trials/1756957634/trial_data.mat']);
+
+
+
+
 %Y1 = [S.act_MN(:,1), S.act_MN(:,2), S.act_MN(:,3), ...
 %      S.act_MN(:,4), S.act_MN(:,5), S.act_MN(:,6)];
 %Y2 = [wfun(1,1)', wfun(2,2)', wfun(3,3)', wfun(4,4)', wfun(5,5)', wfun(6,6)'];
@@ -95,6 +99,7 @@ for i=1:nMuscles
 end
 D = {kin,Ia_i};
 
+return
 
 % Test: Kin → w | neural
 % (does kinematics Granger-cause weight, conditioned on neural?)
@@ -102,11 +107,6 @@ D = {kin,Ia_i};
     % Test: Neural → w | kin
    % [h_neu, p_neu, stat_neu] = gctest(neural, w_ij, kin,'NumLags',4);
 
-
-
-return
-
-  return
 
 
 [b,a] = butter(1,0.05,'low');
@@ -134,11 +134,8 @@ for i = 1:nMuscles
       subplot(212);
       plot(Y1,'r');
 
-    pause
     [h_kin, p_kin, stat_kin] = gctest(w_ij, kin, Ia_i,'NumLags',4)
     toc
-
-    pause
 
 
     % Test: Kin → w | neural

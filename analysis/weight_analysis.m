@@ -1,18 +1,17 @@
 
-%
-
-load(['../../experiments/hebbian/logs/', ...
+load(['../experiments/hebbian/logs/legacy/', ...
       'exp9/trials/1756957634/trial_data.mat']);
 
 %load(['../../experiments/hebbian/logs/PNAS/homvhet/', ...
 %      '1769483041/simulation_data.mat']);
 
+return
 fs = 200;
 dt = 1/fs;
 
 w =@(i,j) arrayfun(@(t) W{t}(i,j),1:numel(W));
 
-doCase = 3;
+doCase = 1;
 
 if doCase == 1
 % Ia_BE -> MN_BE

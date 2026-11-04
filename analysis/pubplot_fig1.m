@@ -1,5 +1,66 @@
 clear all;
-% Nominal model, nominal body
+
+LW = 1;
+BW = 0.75; 
+
+
+fwidth = 910;
+fheight = 520;
+
+%% Layout parameters — edit here
+xmargin   = 0.075;
+ymargin   = 0.05;
+
+
+hmalpha = 0.5;
+
+% Heights
+h_leg     = 0.10;
+h_icon    = 0.10;
+h_trace   = 0.12;
+h_bar     = h_trace * 0.75;
+w_bar_x   = 0.05;
+
+% Start of the traces
+ys_ref  = 0.52;
+yhm_shift = 0.02;
+y_final_shift = 0.02;
+
+% Column layout
+ncol      = 3;
+xsp_col   = 0.15;
+
+% Heatmap tiles
+nhm       = 5;
+hmsp      = -0.03;
+hm_overhang = 0.025;
+
+% Spacings
+ysp       = 0.02;
+ysp_sep   = 0.02;
+
+% Legend annotation
+icon_v    = 0;
+ann_shift = [-0.02, 0, 0.10, 0];
+fontsize  = 9;
+xbasissp  = -0.005;
+
+% --- Derived (do not edit below) ---
+w      = (1 - 2*xmargin - (ncol-1)*xsp_col) / ncol;
+xhm    = (w + xmargin + hm_overhang - (nhm+1)*hmsp) / nhm;
+w_cbar = xhm / 6;
+
+% Vertical stack, top → bottom
+ys_leg  = 1 - ymargin - h_leg;
+y_sep   = ys_leg - ysp_sep;
+ys_hm   = ys_ref + h_trace + ysp;
+ys_syn  = ys_ref  - h_trace - ysp;
+ys_anti = ys_syn  - h_trace - ysp;
+ys_bar  = ys_anti - h_trace - 2*ysp - y_final_shift;
+
+% ---------------------------------------------------
+% Nominal model -- diag organization
+% ---------------------------------------------------
 root = '../experiments/hebbian/logs/hebbian-sweeps/';
 ex0 = [root, 'm0-b0-sweeps_S1_E05_B025/run1/', ...
       '1772404285'];
@@ -12,6 +73,9 @@ data1 = {motif,We};
 str1 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
 prob1 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
 
+% ---------------------------------------------------
+% Nominal model -- synergist organization
+% ---------------------------------------------------
 root = '../experiments/hebbian/logs/hebbian-sweeps/';
 ex0 = [root, 'm0-b0-sweeps_S1_E05_B025/run1/', ...
       '1772485658'];
@@ -24,10 +88,28 @@ str2 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
 prob2 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
 
 data2 = {motif,We};
-Data = {data1, data2, data2};
-P = {{str1,prob1},{str2,prob2},{str2,prob2}};
 
-nmax = 100000;
+% ---------------------------------------------------
+% Nominal model -- maladaptive organization
+% ---------------------------------------------------
+root = '../experiments/hebbian/logs/hebbian-sweeps/';
+ex0 = [root, 'm0-b0-sweeps_S1_E05_B025/run1/', ...
+      '1772512202'];
+% Extract data
+[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
+motif = ds_Ia_motif(We);
+
+[keys, vals] = extract_parameters(ex0);
+str3 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
+prob3 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
+
+data3 = {motif,We};
+
+% ---------------------------------------------------
+Data = {data1, data2, data3};
+P = {{str1,prob1},{str2,prob2},{str3,prob3}};
+
+nmaxs = {10000,100000,100000};
 
 % Colors
 cvR = 0.6;
@@ -41,24 +123,19 @@ cS = cmap1(val2idx(cvS),:);
 cA = cmap1(val2idx(cvA),:);
 
 % Color for weights
-n = 64;
+n = 1024;
 blue = [linspace(0,1,n/2)', linspace(0,1,n/2)', ones(n/2,1)];
 red  = [ones(n/2,1), linspace(1,0,n/2)', linspace(1,0,n/2)'];
 cmap2 = [blue; red];
-cmap2 = flipud(brewermap(1024, 'RdBu'));
+%cmap2 = flipud(brewermap(1024, 'RdBu'));
+%cmap2 = pink(1024);
 
 % Figure
-figure('position',[1440 818 360 520]);
+figure('position',[1440 818 fwidth fheight]);
 
 xmargin = 0.075;
 ymargin = 0.1;
 
-xsp = 0.01;
-ysp = 0.02;
-
-nhm = 5;
-hmsp = 0.002;
-hmalpha = 1;
 
 %xs = xmargin/2;
 %ys = 1 - ymargin/2 - 1.5*h;
@@ -70,35 +147,35 @@ lab = {'S','E','B'};
 shade = linspace(0.5,1,3);
 
 xs = 0.05;
-ys = 0.85;
-h = 0.1;
-w = 0.1;
+ys = ys_leg + ymargin/4;
 
-xbasissp = 0.03;
-shift = [-0.04,0,0.1,0];
-fontsize = 9;
+shift = ann_shift;
 
-pos = [xs,ys,w,h];
+pos = [xs, ys, h_leg, h_leg];
 ax = axes('position',pos);
 
 rgb = motifs_to_rgb(motif, cR, cS, cA, shade);
 p = image(rgb);
 p.AlphaData = double(~isnan(rgb(:,:,1))) * 0.8;
 axis square;
-ax.XAxisLocation = 'top';
+%ax.XAxisLocation = 'top';
 yticks(1:6);
 xticks(1:6);
-yticklabels({'MN-SF', 'MN-SE', 'MN-EF', 'MN-EE', 'MN-BF', 'MN-BE'});
-xticklabels({'Ia-SF', 'Ia-SE', 'Ia-EF', 'Ia-EE', 'Ia-BF', 'Ia-BE'});
-ax.XTickLabelRotation = 45;
-ax.XAxis.FontSize = 7;
-ax.YAxis.FontSize = 7;
+neuron_lab = {'SF', 'SE', 'EF', 'EE', 'BF', 'BE'};
+yticklabels(neuron_lab);
+xticklabels(neuron_lab);
+ax.XTickLabelRotation = 0;
+ax.XAxis.FontSize = 6;
+ax.YAxis.FontSize = 6;
+xlabel('Ia Neurons','fontsize',8);
+ylabel('Motoneurons','fontsize',8);
+ax.TickDir = 'out';
+box off;
 
-xs = xs + w + xbasissp;
-h = 0.06;
-w = 0.06;
+
+xs = xs + h_leg + xbasissp;
 for i=1:3
-  pos = [xs,ys+h/4,w,h];
+  pos = [xs, ys+h_icon*icon_v, h_icon, h_icon];
   ax = axes('position',pos);
 
   Rmi = reshape(motif.maskp(:,i),6,6);
@@ -121,24 +198,25 @@ for i=1:3
   ax.YAxis.Visible = 'off';
 
 
+
   ann = annotation('textbox',pos+shift);
   if i==1
-    ann.String = [' = r_',lab{i}];
+    ann.String = [' =    r_',lab{i}];
   else
-    ann.String = [' + r_',lab{i}];
+    ann.String = [' +    r_',lab{i}];
   end
   ann.EdgeColor ='none';
   ann.HorizontalAlignment = 'left';
   ann.VerticalAlignment = 'middle';
   ann.FontSize = fontsize;
 
-  xs = xs + w + xbasissp;
+  xs = xs + h_icon + xbasissp;
 
 end
 
 
 for i=1:3
-  pos = [xs,ys+h/8,w,h];
+  pos = [xs, ys+h_icon*icon_v, h_icon, h_icon];
   ax = axes('position',pos);
 
   Smi = reshape(motif.maskp(:,i+3),6,6);
@@ -159,16 +237,16 @@ for i=1:3
   ax.YAxis.Visible = 'off';
 
   ann = annotation('textbox',pos+shift);
-  ann.String = [' + s_',lab{i}];
+  ann.String = [' +   s_',lab{i}];
   ann.EdgeColor ='none';
   ann.HorizontalAlignment = 'left';
   ann.VerticalAlignment = 'middle';
   ann.FontSize = fontsize;
 
-  xs = xs + w + xbasissp;
+  xs = xs + h_icon + xbasissp;
 end
 for i=1:3
-  pos = [xs,ys+h/8,w,h];
+  pos = [xs, ys+h_icon*icon_v, h_icon, h_icon];
   ax = axes('position',pos);
 
   Ami = reshape(motif.maskp(:,i+6),6,6);
@@ -189,52 +267,58 @@ for i=1:3
   ax.YAxis.Visible = 'off';
 
   ann = annotation('textbox',pos+shift);
-  ann.String = [' + a_',lab{i}];
+  ann.String = [' +   a_',lab{i}];
   ann.EdgeColor ='none';
   ann.HorizontalAlignment = 'left';
   ann.VerticalAlignment = 'middle';
   ann.FontSize = fontsize;
 
-  xs = xs + w + xbasissp;
+  xs = xs + h_icon + xbasissp;
 end
 
+ann = annotation('line', [0.01, 0.99], [y_sep, y_sep]);
+ann.Color = [0.75, 0.75, 0.75];
 
 
 % -----------------------------------------------------------------------------
 % Traces
 % -----------------------------------------------------------------------------
-xsp = 0.15;
-ncol = 3;
-xs = xmargin;
-ys = ys - 3*h - ysp;
-h = 0.15;
-w = (1 - 2*xmargin - (ncol-1)*xsp)/ncol;
+xsp = xsp_col;
+xs  = xmargin;
+h   = h_trace;
+ys  = ys_ref;
 
-ys = 0.57;
 
 for i=1:ncol
 
   dq = Data{i};
   motif = dq{1};
   We = dq{2};
+  nmax = nmaxs{i};
 
+  % ---- Reflex
   pos = [xs,ys,w,h];
   ax = axes('position',pos);
 
   n = numel(motif.rg);
   r = 1:n;
   xl = [0 nmax];
-  s = scatter(r,motif.r(:,1),0.01,'.'); hold on;
-  s.MarkerEdgeColor = shade(1)*cR;
-  s = scatter(r,motif.r(:,2),0.01,'.');
-  s.MarkerEdgeColor = shade(2)*cR;
-  s = scatter(r,motif.r(:,3),0.01,'.');
-  s.MarkerEdgeColor = shade(3)*cR;
+  %s = scatter(r,motif.r(:,1),markerSize,'.'); hold on;
+  %s.MarkerEdgeColor = shade(1)*cR;
+  %s = scatter(r,motif.r(:,2),markerSize,'.');
+  %s.MarkerEdgeColor = shade(2)*cR;
+  %s = scatter(r,motif.r(:,3),markerSize,'.');
+  %s.MarkerEdgeColor = shade(3)*cR;
 
-  %s = plot(r,motif.rg,'linewidth',0.1);
-  %s.Color = [1 0 0 0.5];
+  for k=1:3
+    plot(r,motif.r(:,k), ...
+        Color=shade(k)*cR, ...
+        LineWidth=LW);
+    hold on;
+  end
 
   ylim([0,1]);
+  yticklabels({0,'',1});
   xlim(xl);
   if i==1
     ylabel('Reflex')
@@ -245,29 +329,38 @@ for i=1:ncol
   end
   ax.Color = 'none';
 
-  ann = annotation('textbox',pos+[0,3*h/4,0,0]);
-  ann.String = ['\gamma = ',num2str(P{i}{1}), ...
+  ax_reflex = ax;
+
+  ann = annotation('textbox', pos+[-0.05, 3*h_trace/4 + 0.02, 0.1, 0.075]);
+  ann.String = ['\lambda_{max} = ',num2str(P{i}{1}), ...
                 ',    p_b = ', num2str(P{i}{2},'%.e')];
   ann.EdgeColor = 'none';
   ann.HorizontalAlignment = 'center';
+  ann.Interpreter = 'tex';
 
-  ys = 1 - ymargin/2 - 3.5*h - ysp;
+  ys = ys_syn;
 
-  %% Motif Strength (Additive)
+  % ---- Synergy
   pos = [xs,ys,w,h];
   ax = axes('position',pos);
 
-  s = scatter(r,motif.sp(:,1),0.1,'.'); hold on;
-  s.MarkerEdgeColor = shade(1)*cS;
-  s = scatter(r,motif.sp(:,2),0.1,'.');
-  s.MarkerEdgeColor = shade(2)*cS;
-  s = scatter(r,motif.sp(:,3),0.1,'.');
-  s.MarkerEdgeColor = shade(3)*cS;
+  %s = scatter(r,motif.sp(:,1),markerSize,'.'); hold on;
+  %s.MarkerEdgeColor = shade(1)*cS;
+  %s = scatter(r,motif.sp(:,2),markerSize,'.');
+  %s.MarkerEdgeColor = shade(2)*cS;
+  %s = scatter(r,motif.sp(:,3),markerSize,'.');
+  %s.MarkerEdgeColor = shade(3)*cS;
 
-  %s = plot(r,motif.sg,'linewidth',0.1);
-  %s.Color = 'k';
+  for k=1:3
+    plot(r,motif.sp(:,k), ...
+        Color=shade(k)*cS, ...
+        LineWidth=LW);
+    hold on;
+  end
+
 
   ylim([0,1]);
+  yticklabels({0,'',1});
   xlim(xl);
   if i==1
     ylabel('Synergy')
@@ -278,45 +371,53 @@ for i=1:ncol
   end
   ax.Color = 'none';
 
-  ys = 1 - ymargin/2 - 4.5*h - 2*ysp;
+  ys = ys_anti;
 
-  %% Motif Strength (Additive)
+  % ---- Anti-Synergy
   pos = [xs,ys,w,h];
   ax = axes('position',pos);
 
-  s = scatter(r,motif.ap(:,1),0.1,'.'); hold on;
-  s.MarkerEdgeColor = shade(1)*cA;
-  s = scatter(r,motif.ap(:,2),0.1,'.');
-  s.MarkerEdgeColor = shade(2)*cA;
-  s = scatter(r,motif.ap(:,3),0.1,'.');
-  s.MarkerEdgeColor = shade(3)*cA;
+%  s = scatter(r,motif.ap(:,1),markerSize,'.'); hold on;
+%  s.MarkerEdgeColor = shade(1)*cA;
+%  s = scatter(r,motif.ap(:,2),markerSize,'.');
+%  s.MarkerEdgeColor = shade(2)*cA;
+%  s = scatter(r,motif.ap(:,3),markerSize,'.');
+%  s.MarkerEdgeColor = shade(3)*cA;
 
-  %s = plot(r,motif.ag,'linewidth',0.1);
-  %s.Color = 'k';
+  for k=1:3
+    plot(r,motif.ap(:,k), ...
+        Color=shade(k)*cA, ...
+        LineWidth=LW);
+    hold on;
+  end
 
   ylim([0,1]);
+  yticklabels({0,'',1});
   xlim(xl);
+  xticks(linspace(0,nmaxs{i},3));
   if i==1
     ylabel('Anti-Synergy')
-    xlabel('Simulation steps')
+    xlabel('Sim steps')
   else
-    xlabel('Simulation steps')
+    xlabel('Sim steps')
     yticklabels({});
   end
   ax.Color = 'none';
 
-  D = [mean(motif.rp(end-200:end,:),1), ...
-        mean(motif.sp(end-200:end,:),1), ...
-        mean(motif.ap(end-200:end,:),1)]';
+  D = [mean(motif.rp(nmax-200:nmax,:),1), ...
+        mean(motif.sp(nmax-200:nmax,:),1), ...
+        mean(motif.ap(nmax-200:nmax,:),1)]';
 
   C = [shade(1).*cR; shade(2).*cR; shade(3).*cR; ...
         shade(1).*cS; shade(2).*cS; shade(3).*cS; ...
         shade(1).*cA; shade(2).*cA; shade(3).*cA];
 
 
-  pos = [xs, ys-h-2*ysp, w, h*0.75];
+  % ---- Final
+  pos = [xs-w_bar_x/2, ys_bar, w+w_bar_x, h_bar];
   ax = axes('Position',pos);
   b = bar(D, 'LineWidth', 0.25, 'FaceColor', 'flat');
+  b.BarWidth = BW;
   b.CData = C;
   b.EdgeColor = 'none';
   grid on;
@@ -324,56 +425,68 @@ for i=1:ncol
     yticks(linspace(0,1,5));
     yticklabels({0, '', '', '', 1});
     xticklabels({'r_S', 'r_E', 'r_B', 's_S', 's_E', 's_B', 'a_S', 'a_E', 'a_B'});
+    xtickangle(0);
   ax.Color = 'none';
   if i==1
     ylabel('Final Weights')
   end
 
-  % Weight Transformation
-  xhm = (w + xmargin - (nhm+1)*hmsp) / nhm;
-  ys = 1 - ymargin/2 - 2.5*h;
+  %----- Weight Transformation
+  xs = xs - xmargin/2 - hm_overhang/2 + hmsp;
 
-  xs = xs - xmargin/2 + hmsp;
+  hm_indices = round(linspace(0, min(nmax, numel(We)-1), nhm));
   for j=1:nhm
-    pos = [xs,ys + h+ysp,xhm,xhm];
+    pos = [xs, ys_hm+yhm_shift, xhm, xhm];
     ax = axes('pos',pos);
-    indx = floor((j-1)*numel(r)/nhm);
+    indx = hm_indices(j);
     p = imagesc(We{indx+1});
     p.AlphaData = hmalpha;
     colormap(ax, cmap2);
     caxis([0,1]);
     axis square;
     axis off;
+
+    x_hm = pos(1) + pos(3)/2;
+    y_hm = pos(2);
+
+    ax_pos = ax_reflex.Position;          % [x y w h] in figure
+    xl = ax_reflex.XLim;
+    x_trace = ax_pos(1) + ax_pos(3) * (indx - xl(1)) / (xl(2) - xl(1));
+    y_trace = ax_pos(2) + ax_pos(4);     % top edge
+
+    ann = annotation('line', [x_hm, x_trace], [y_hm, y_trace]);
+    ann.Color = [0.8 0.8 0.8 0.1];
+    ann.LineWidth = 0.1;
+
     xs = xs + xhm + hmsp;
   end
 
-  pos_leg = pos;
-  pos_leg = pos_leg + [1.25*xhm +xhm*0.0 0 0];
-  pos_leg(3) = xhm/4;
-  pos_leg(4) = xhm;
-  ax = axes('pos',pos_leg);
-  p = imagesc([0 1], [0 1], flipud(linspace(0,1,1024)'));
-  p.AlphaData = 0.8;
-  ylim([0,1]);
-  ax.XAxis.Visible = 'off';
-  ax.YAxisLocation = 'right';
-  yticklabels({'1', '', '0'});
-  colormap(ax,cmap2);
-  ax.Color = 'none';
-  caxis([0,1]);
+  if i==3
+    pos_leg = [pos(1)+xhm/2, ys_hm-0.1, w_cbar, xhm];
+    ax = axes('pos',pos_leg);
+    p = imagesc([0 1], [0 1], flipud(linspace(0,1,1024)'));
+    p.AlphaData = hmalpha;
+    ylim([0,1]);
+    ax.XAxis.Visible = 'off';
+    ax.YAxisLocation = 'right';
+    yticklabels({'1', '', '0'});
+    colormap(ax,cmap2);
+    ax.Color = 'none';
+    caxis([0,1]);
+  end
 
-  if i==1
-    x = [xs+xsp/4, xs+xsp/4];
+  if (i==1) || (i==2)
+    x_div = xmargin + i*(w + xsp) - xsp/2;
+    x = [x_div, x_div];
     y = [0.01, 0.82];
-    annotation('line',x,y)
+    ann = annotation('line',x,y);
+    ann.Color = [0.75, 0.75, 0.75];
   end
 
 
   xs = xmargin;
   xs = xs + i*(w + xsp);
-  ys = 0.85;
-  ys = ys - 3*h - ysp;
-  ys = 0.57
+  ys = ys_ref;
 
 end
 

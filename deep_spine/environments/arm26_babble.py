@@ -24,6 +24,11 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         relative_muscle_scale: np.ndarray = None,
         episode_length: int = 100,
         seed: Optional[int] = 12345,
+        ic: Optional[np.ndarray] = None,
+        ic_range: Optional[np.ndarray] = None,
+        random_ic: bool = False,
+        linked: str = 'none',
+        ic_seed: Optional[int] = None,
         xml_path: str = 'arm26.xml',
         frame_rate: Optional[int] = None,
         save_frames_to_path: Optional[str] = None,
@@ -103,16 +108,57 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         self.reward = 0
         self.eps_reward = 0
         self.seed = seed
+        self._ic_seed_explicit = ic_seed is not None
+        self.ic_seed = ic_seed if ic_seed is not None else seed
 
         np.random.seed(self.seed)
-        self.ic_rng = np.random.default_rng(self.seed)
+        self.ic_rng = np.random.default_rng(self.ic_seed)
+
+        # Free-vibration initial conditions: [q0, q1, dq0, dq1]
+        self.ic = np.zeros(4) if ic is None else np.asarray(ic, dtype=float)
+        self.ic_range = (
+            np.zeros(4) if ic_range is None else np.asarray(ic_range, dtype=float)
+        )
+        if isinstance(random_ic, str):
+            random_ic = random_ic.strip().lower() == 'true'
+        self.random_ic = bool(random_ic)
+        # IC linking mode -> antiphase kick by mirroring one joint onto the other:
+        #   'vel-linked' -> dq1 = -dq0 ; 'pos-linked' -> q1 = -q0 ; 'none' -> as-is.
+        _valid_linked = ('none', 'vel-linked', 'pos-linked')
+        linked = str(linked).strip().lower()
+        if linked == 'true':
+            linked = 'vel-linked'      # backward-compat with the old boolean
+        elif linked == 'false':
+            linked = 'none'
+        if linked not in _valid_linked:
+            raise ValueError(f"linked={linked!r} not in {_valid_linked}")
+        self.linked = linked
+
+        # A kinematic reset (teleport to the IC) only makes sense when an IC is
+        # actually requested -- pendulum / free-vibration trials. Plain babble
+        # requests no IC, so we keep qpos/qvel/act continuous across episodes and
+        # let the passive muscle mechanics keep the arm bounded; otherwise every
+        # episode boundary injects an artificial jump into the spontaneous activity.
+        self.reset_kinematics = bool(
+            self.random_ic
+            or np.any(self.ic != 0)
+            or np.any(self.ic_range != 0)
+        )
 
         if relative_muscle_scale is None:
             relative_muscle_scale = np.ones(self.model.nu)
         self.relative_muscle_scale = relative_muscle_scale
 
-        self.default_muscle_strengths = (
-                relative_muscle_scale * self.model.actuator_gainprm[:,3]
+        # Scale the muscle's peak force F0 (gainprm[:,2]) directly, NOT `scale`
+        # (gainprm[:,3]). The XML sets an explicit force>=0, so MuJoCo ignores
+        # `scale` and no longer auto-sizes F0 = scale/acc0 -- keeping F0 (hence
+        # muscle strength) decoupled from limb inertia (body_mass) rather than
+        # secretly co-varying with it across the embodiment sweep.
+        self.default_muscle_gain = (
+                relative_muscle_scale * self.model.actuator_gainprm[:,2]
+        )
+        self.default_muscle_bias = (
+                relative_muscle_scale * self.model.actuator_biasprm[:,2]
         )
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
@@ -128,13 +174,31 @@ class Arm26Babble(BaseEnvironment, gym.Env):
         print(f'gravity: {self.model.opt.gravity}')
         print(f'viscosity: {self.model.opt.viscosity}')
         print(f'damping: {self.model.dof_damping}')
+        print(f'reset kinematics per episode: {self.reset_kinematics}')
         print('Muscle Normalization:')
+        # gainprm = [range0, range1, force, scale, lmin, lmax, vmax, fpmax, fvmax]
+        # Everything needed to reconstruct the length map (L0, LT, range) and the
+        # FLV(lmin, lmax, vmax, fpmax, fvmax) force curves for any simulated model.
+        gainprm = self.model.actuator_gainprm
+        print('range: \n', gainprm[:, 0:2])   # [range0, range1], operating length in L0 units
+        print('force: ', gainprm[:, 2])       # peak active force F0 (-1 => derived from scale)
+        print('scale: ', gainprm[:, 3])       # force scale (current strength knob)
         print('L0: ', self.spine.L0)
+        print('LT: ', self.spine.LT)          # fixed tendon offset: len = LT + L0 * L_tilde
         print('lmin: ', self.spine.lmin)
         print('lmax: ', self.spine.lmax)
         print('vmax: ', self.spine.vmax)
+        print('fpmax: ', gainprm[:, 7])       # peak passive force at lmax (units of F0)
+        print('fvmax: ', gainprm[:, 8])       # peak force at max lengthening velocity (units of F0)
         self.spine._sample_mechanics(self.data)
-        print('length at rest: ', self.spine.length)
+        # At rest (q=0, vertical arm) we want scaled_length == 1.0: the peak of the
+        # active FL curve and the toe of the passive FL curve (passive force starts here).
+        #   scaled_length : fiber length in L0 units, 1.0 = optimal              (L0 units)
+        #   length        : afferent signal, min-max over [lmin,lmax], 0..1      (0.5 <=> L~=1.0)
+        #   force         : actuator_force with zero drive => passive force      (Newtons)
+        print('scaled_length at rest [L0 units, 1.0=optimal]: ', self.spine.scaled_length)
+        print('length at rest        [afferent 0..1]:         ', self.spine.length)
+        print('passive force at rest [N, zero drive]:         ', self.spine.force)
         print()
         np.set_printoptions()
 
@@ -144,15 +208,25 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
-        self.model.actuator_gainprm[:,3] = (
-            strength * self.default_muscle_strengths
+        self.model.actuator_gainprm[:,2] = (
+            strength * self.default_muscle_gain
         )
+        self.model.actuator_biasprm[:,2] = (
+            strength * self.default_muscle_bias
+        )
+
+
+
         #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
 
     def update_seed(self, seed):
         self.seed = int(seed)
         np.random.seed(self.seed)
-        self.ic_rng = np.random.default_rng(self.seed)
+        # A dedicated ic_seed stays fixed across runs; otherwise IC sampling
+        # follows the main seed.
+        if not self._ic_seed_explicit:
+            self.ic_seed = self.seed
+            self.ic_rng = np.random.default_rng(self.ic_seed)
         print(f'Seed: {self.seed}\n\n')
 
 
@@ -171,8 +245,26 @@ class Arm26Babble(BaseEnvironment, gym.Env):
 
     def _set_initial_conditions(self):
         self.done = False
+        if self.reset_kinematics:
+            # Explicit IC requested: clear qpos/qvel/act and impose the
+            # free-vibration IC [q0, q1, dq0, dq1].
+            mujoco.mj_resetData(self.model, self.data)
+            if self.random_ic:
+                ic = self.ic_rng.uniform(-self.ic_range, self.ic_range)
+            else:
+                ic = self.ic.copy()
+            if self.linked == 'vel-linked':
+                ic[3] = -ic[2]   # elbow vel = -(shoulder vel): antiphase velocity
+            elif self.linked == 'pos-linked':
+                ic[1] = -ic[0]   # elbow angle = -(shoulder angle): antiphase position
+            self.data.qpos[:2] = ic[:2]
+            self.data.qvel[:2] = ic[2:]
+            mujoco.mj_forward(self.model, self.data)
+            self.spine.set_descending_drive(np.zeros(self.spine.n,))
+        # Episode bookkeeping always resets. When no IC is requested the kinematic
+        # state (qpos/qvel/act) is left untouched so spontaneous babble continues
+        # smoothly across episode boundaries.
         self.data.time = 0
-        self.spine.set_descending_drive(np.zeros(self.spine.n,))
         self.simulation_steps = 0
 
     def _update_status(self):

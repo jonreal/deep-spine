@@ -1,7 +1,7 @@
 function Z_all = exp_summary(tab,opt)
   arguments
     tab
-    opt.outdir (1,1) string = './summary'
+    opt.outdir (1,1) string = './'
   end
 
   muscle_strengths = unique(tab.opt_max_mus_str);

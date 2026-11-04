@@ -24,7 +24,7 @@ function summary_table = ds_process_babble(root,opt)
     'rS', 'rE', 'rB', 'r', ...
     'sS', 'sE', 'sB', 's', ...
     'aS', 'aE', 'aB', 'a', ...
-    'score'
+    'score', 'sel'
   };
 
   ncols_outcomes = numel(signals_str) * numel(measures);
@@ -66,7 +66,7 @@ function summary_table = ds_process_babble(root,opt)
         motif.rp(:,1), motif.rp(:,2), motif.rp(:,3), motif.rg, ...
         motif.sp(:,1), motif.sp(:,2), motif.sp(:,3), motif.sg, ...
         motif.ap(:,1), motif.ap(:,2), motif.ap(:,3), motif.ag ...
-        motif.score
+        motif.score, motif.sg - motif.ag
       };
 
       outcomes = ...
@@ -83,7 +83,7 @@ function summary_table = ds_process_babble(root,opt)
       end
 
       count = count + 1;
-      rows{count} = [{name}, param_cells, outcomes{:}];
+      rows{count} = [{name}, {root}, param_cells, outcomes{:}];
 
       % Build column labels once
       if count == 1
@@ -92,7 +92,7 @@ function summary_table = ds_process_babble(root,opt)
             @(measure) [signal_str, '_', measure], ...
             measures_str, 'UniformOutput', false), ...
           signals_str, 'UniformOutput',false);
-        label = [{'sim-ID'}, keys(:)', outcomes_str{:}];
+        label = [{'sim-ID'}, {'root'}, keys(:)', outcomes_str{:}];
       end
 
       % Dashboard figure

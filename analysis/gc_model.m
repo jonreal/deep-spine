@@ -1,5 +1,5 @@
 
-p = 50;
+p = 5;
 X1 = lagmatrix(Ia_i,0:p);
 X1 = X1(p+1:end-p,:);
 

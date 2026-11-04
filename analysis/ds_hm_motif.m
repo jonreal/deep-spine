@@ -1,227 +1,123 @@
-function Z_all = exp_summary(tab,opt)
+function ds_hm_motif(tab, opt)
+%DS_HM_MOTIF  Sweep heatmaps of the motif metrics vs (babble, strength).
+%   One ROW per Hebbian gain (kappa); columns = mean Reflex (R), Synergy (S),
+%   Antagonist (A), and selectivity S-A. Each panel interpolates the metric
+%   over the (p_b, lambda_max) grid via plot_heatmap, with babble probability
+%   p_b (the dominant driver) on x and strength lambda_max on y.
+%
+%   ds_hm_motif(summary_table)
+%   ds_hm_motif(summary_table, cmap=magma(1024))
   arguments
     tab
-    opt.outdir (1,1) string = './summary'
+    opt.cmap = magma(1024);
+    opt.selzl = [0 0.30];        % selectivity range; S-A spans ~[-0.01, 0.30]
+    opt.selcmap = [];            % [] -> built-in white->teal ramp
+    opt.selectivity (1,1) logical = true   % false: drop the S-A column and its colorbar
+  end
+  if isempty(opt.selcmap)
+    n = 1024; t = linspace(0,1,n)';
+    opt.selcmap = [1-0.90*t, 1-0.55*t, 1-0.35*t];   % white -> deep teal
   end
 
-  muscle_strengths = unique(tab.opt_max_mus_str);
-  babble_prob = unique(tab.sup_kwa_bab_max_pro);
   gains = unique(tab.('heb_kwa_gai'));
-
-  %cmap = flipud(cbrewer('div','RdBu',64));
-  %
-  cmap = flipud(brewermap(1024, 'RdBu'));
-
-  %n = 64;
-  %blue = [linspace(0,1,n/2)', linspace(0,1,n/2)', ones(n/2,1)];
-  %red  = [ones(n/2,1), linspace(1,0,n/2)', linspace(1,0,n/2)'];
-  %cmap = [blue; red];
-
-  %cmap = flipud(gray);
-
-  alpha = 1;
-  N = 1000;
-  scale = 'log';
-
-
   nrows = numel(gains);
-  ncols = 1;
+  ncols = 3 + opt.selectivity;
 
-  pxh = 800;
-  pxw = pxh;
+  zfields = {'r_mean','s_mean','a_mean','sel_mean'};
+  ctitles = {'Reflex (R)','Synergy (S)','Antagonist (A)','Selectivity (S - A)'};
 
-  figure('Position', [431 28 958 1309]);
-  xl = [min(tab.opt_max_mus_str), max(tab.opt_max_mus_str)];
-  yl = [min(tab.sup_kwa_bab_max_pro), max(tab.sup_kwa_bab_max_pro)];
+  % plot_heatmap log-scales y only, so p_b is passed as log10(p_b) on a linear
+  % x-axis (interpolation then happens in log space) with 10^k tick labels.
+  xl = log10([0.001 0.1]);
+  yl = [0.1 1];
+  zl = [0 1];
+  % Selectivity is a signed difference on a much smaller scale than R/S/A, so
+  % it gets its own limits and colormap; sharing [0,1] would render it blank.
+  zls   = {zl, zl, zl, opt.selzl};
+  cmaps = {opt.cmap, opt.cmap, opt.cmap, opt.selcmap};
+  zfields = zfields(1:ncols);  ctitles = ctitles(1:ncols);
+  zls     = zls(1:ncols);      cmaps   = cmaps(1:ncols);
 
-  xl = [0.1 1];
-  yl = [0.0003    0.0100];
-      zl = [0 1];
+  % ---- layout: gain-label column | 4-heatmap grid | right colorbar ----
+  figH = round(200*nrows + 140);
+  figure('Position', [431 60 1100 figH]);
 
-
-  ysp = 0.02;
-  xsp = 0.02;
-  xpad = 0.07;
-  ypad = 0.07;
-
-  gainFudge = 0.9;
+  ysp   = 0.02;      % gap between rows
+  xsp   = 0.02;      % gap between heatmaps
+  xpad  = 0.03;      % left figure margin
+  wlabs = 0.06;      % gain-label column width
+  ypad  = 0.07;
+  cbw   = 0.015;     % right colorbar width
+  cgap  = 0.02;
 
   h = (1 - 2*ypad - (nrows-1)*ysp) / nrows;
-  w = (1 - 2*xpad - (ncols-1)*xsp) / ncols;
+  x_hm0      = xpad + wlabs;
+  x_hm_right = 1 - xpad - cbw - cgap;
+  w = (x_hm_right - x_hm0 - (ncols-1)*xsp) / ncols;
 
-  x0 = xpad;
-  y0 = 1 - ypad - h;
+  ys = 1 - ypad - h;
+  for i = 1:nrows
 
-  legend_list = [];
-  axes_list = zeros(1, nrows*ncols);
-  indx = 1;
-  ys = y0;
-  xs = x0;
+    iq = find(tab.('heb_kwa_gai') == gains(i));
+    x  = log10(tab.sup_kwa_bab_max_pro(iq));
+    y  = tab.opt_max_mus_str(iq);
 
-  %Z_all = cell(numel(gains), numel(quiries));
-  for i=1:numel(gains)
-    pos = [xs, ys, w, h];
+    xs = x_hm0;
+    for c = 1:ncols
+      pos = [xs, ys, w, h];
+      ax  = axes('Position', pos);
+      z   = tab.(zfields{c})(iq);
 
-    if i==1
-      ann = annotation('textbox',pos + [-xpad*gainFudge, ypad/2, -0.1, 0]);
-      ann.String = 'Gain';
-      ann.FontSize = 12;
-      ann.HorizontalAlignment = 'left';
-      ann.VerticalAlignment = 'top';
-      ann.EdgeColor = 'none';
+      xtl = (i==nrows) && (c==1);   % tick labels only on the bottom-left panel
+      ytl = (i==nrows) && (c==1);
+      plot_heatmap(ax,x,y,z, xl=xl,yl=yl,zl=zls{c},scale='linear', ...
+                   XTick=[-3 -2 -1], YTick=linspace(0.1,1,4), ...
+                   XTickLabel={'10^{-3}','10^{-2}','10^{-1}'}, ...
+                   XTickLabels=xtl, YTickLabels=ytl, cmap=cmaps{c});
+
+      if (i==nrows) && (c==1)
+        xlabel(ax,'Babble Probability');
+        ylabel(ax,'Strength');
+      end
+
+      if i==1                        % column titles on the top row
+        ann = annotation('textbox','Position',pos+[0,ypad/2,0,0]);
+        ann.String = ctitles{c};
+        ann.FontSize = 12;
+        ann.EdgeColor = 'none';
+        ann.HorizontalAlignment = 'center';
+        ann.VerticalAlignment = 'top';
+      end
+
+      if c==1                        % row label = Hebbian gain (kappa)
+        ann = annotation('textbox','Position',[0, ys, x_hm0, h]);
+        ann.String = sprintf('\\kappa = %g', gains(i));
+        ann.FontSize = 12;
+        ann.EdgeColor = 'none';
+        ann.HorizontalAlignment = 'left';
+        ann.VerticalAlignment = 'middle';
+      end
+
+      xs = xs + w + xsp;
     end
-
-      ax = axes('Position', pos);
-
-      iq = find(tab.('heb_kwa_gai') == gains(i));
-      x = tab.opt_max_mus_str(iq);
-      y = tab.sup_kwa_bab_max_pro(iq);
-      z = tab.score_mean(iq);
-
-      plot_heatmap(ax,x,y,z);
-
-
-      return
-
-      p = scatter3(x,y,z);
-      p.MarkerEdgeColor = cmap(i,:);
-      p.MarkerFaceColor = cmap(i,:);
-      p.Marker = '.';
-
-      % Create interpolant object
-      F = scatteredInterpolant(x, y, z, 'linear', 'none');
-
-      % Create regular grid
-      [X, Y] = meshgrid(linspace(min(x), max(x), N), ...
-                        linspace(min(y), max(y), N));
-
-      % Evaluate interpolant on grid
-      Z = F(X, Y);
-
-      hold all;
-      % Plot with mesh or surf
-      p = surf(X, Y, Z);
-      p.FaceAlpha = alpha;
-      p.EdgeColor = 'none';
-      legend_list(end+1) = p;
-
-      %imagesc([min(X),max(X)],[min(Y),max(Y)],Z);
-      %[~,p] = contourf(X, Y, Z);
-      %p.FaceAlpha = alpha;
-      colormap(cmap);
-      caxis(zl);
-
-      ax.YAxis.Scale = scale;
-
-      if ~(i == numel(gains))
-        ax.XAxis.TickLabels = {};
-      end
-
-      if i==numel(gains)
-        xlabel('Strength');
-        ylabel('Babble Probability');
-      end
-
-
-
-      axes_list(indx) = ax;
-      indx = indx + 1;
-
-
-      xlim(xl);
-      ylim(yl);
-      zlim(zl);
-
-      view(0,90)
-
-    %gains_str = arrayfun(@num2str, gains, 'UniformOutput', false);
-    %legend(legend_list,gains_str)
-    %if ~exist(opt.outdir, 'dir')
-    %    mkdir(opt.outdir);
-    %end
-    %print([opt.outdir{:},'/',quiries{q},'.png'],'-dpng');
-    %ax = gca;
-    %%close(gcf);
     ys = ys - h - ysp;
   end
+
+  % ---- two colorbars: R/S/A share [0,1]; selectivity has its own ----
+  Hc = (1 - 2*ypad - 0.06)/2;                 % each bar, with a gap between
+  draw_cbar([x_hm_right + cgap, ypad + Hc + 0.06, cbw, Hc], opt.cmap,    zl,        'R, S, A');
+  if opt.selectivity
+    draw_cbar([x_hm_right + cgap, ypad,           cbw, Hc], opt.selcmap, opt.selzl, 'S - A');
+  end
 end
-%  linkaxes(axes_list,'xyz');
-%  %fprintf(['Saved figure to: ', [opt.outdir{:},'/summary.png'], '\n\n']);
-%  %
-%  p = colorbar;
-%  p.Position = [1-xpad*0.9, ypad, xpad/4, 1-2*ypad];
-%
-%  xs = x0 + (ncols-1)*(w + xspace);
-%  ys = y0;
-%  for g=1:numel(gains)
-%    pos = [xs, ys, w, h];
-%
-%    if g==1
-%      ann = annotation('textbox',pos + [0, ypad/2, 0, 0]);
-%      ann.String = qlab{end};
-%      ann.FontSize = 12;
-%      ann.HorizontalAlignment = 'center';
-%      ann.VerticalAlignment = 'top';
-%      ann.EdgeColor = 'none';
-%    end
-%
-%    ax = axes('Position', pos);
-%    hold all;
-%    score = Z_all{g,1}.*Z_all{g,2}.*(1 - Z_all{g,3});
-%
-%    %size(score)
-%    
-%
-%    [max_score,indx] = max(score(:));
-%    xm = X(:);
-%    xm = xm(indx);
-%    ym = Y(:);
-%    ym = ym(indx);
-%
-%    %size(x)
-%    %size(X)
-%    %INDX = arrayfun(@(i) find(x(i) == X(:)),1:numel(x),'UniformOutput',0);
-%
-%    %return
-%
-%    p = surf(X, Y, score);
-%    p.FaceAlpha = alpha;
-%    p.EdgeColor = 'none';
-%    legend_list(end+1) = p;
-%
-%
-%    %size(x)
-%    %size(y)
-%    %size(score)
-%    %p = scatter3(x,y,score);
-%
-%    %p.MarkerEdgeColor = cmap(i,:);
-%    %p.MarkerFaceColor = cmap(i,:);
-%    %p.Marker = '.';
-%
-%    %ps = scatter3(xm,ym,max_score);
-%    %ps.MarkerFaceColor = 'black';
-%    %ps.MarkerEdgeColor = 'black';
-%    %text(xm+0.02,ym,max_score,num2str(max_score));
-%
-%
-%    %imagesc([min(X),max(X)],[min(Y),max(Y)],Z);
-%    %[~,p] = contourf(X, Y, score);
-%    %p.FaceAlpha = alpha;
-%    colormap(cmap);
-%    caxis(zl);
-%
-%    ax.YAxis.Scale = scale;
-%
-%    xlim(xl);
-%    ylim(yl);
-%    zlim(zl);
-%
-%    view(0,90)
-%
-%    ax.YAxis.TickLabels = {};
-%    if ~(g == numel(gains))
-%      ax.XAxis.TickLabels = {}
-%    end
-%
-%
+
+function draw_cbar(pos, cmap, lims, lbl)
+  ax  = axes('Position', pos);
+  pcb = imagesc([0 1],[0 1], flipud(linspace(0,1,256)'));
+  pcb.AlphaData = 0.8;
+  colormap(ax, cmap);  caxis(ax,[0 1]);
+  ylim(ax,[0 1]);  ax.XAxis.Visible = 'off';
+  ax.YAxisLocation = 'right';
+  yticks(ax,[0 1]);  yticklabels(ax, {num2str(lims(2)), num2str(lims(1))});
+  title(ax, lbl, 'FontSize', 9, 'FontWeight','normal');
+end

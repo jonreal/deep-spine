@@ -152,12 +152,19 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         self.ic_rng = np.random.default_rng(self.seed + 1)
 
         if relative_muscle_scale is None:
-            relative_muscle_scale = self.model.nu
-
+            relative_muscle_scale = np.ones(self.model.nu)
         self.relative_muscle_scale = relative_muscle_scale
 
-        self.default_muscle_strengths = (
-                relative_muscle_scale * self.model.actuator_gainprm[:,3]
+        # Scale the muscle's peak force F0 (gainprm[:,2]) directly, NOT `scale`
+        # (gainprm[:,3]), as in arm26_babble.py. The XML sets an explicit
+        # force>=0, so MuJoCo ignores `scale` and no longer auto-sizes
+        # F0 = scale/acc0 -- keeping F0 decoupled from limb inertia (body_mass).
+        # biasprm[:,2] carries F0 for the passive force and is scaled with it.
+        self.default_muscle_gain = (
+                relative_muscle_scale * self.model.actuator_gainprm[:,2]
+        )
+        self.default_muscle_bias = (
+                relative_muscle_scale * self.model.actuator_biasprm[:,2]
         )
         self.muscle_strength = np.array([muscle_strength])
         self.set_muscle_strength(self.muscle_strength)
@@ -184,6 +191,8 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
         print(f'damping: {self.model.dof_damping}')
         print(f'muscle_strength: {self.muscle_strength}\n')
         print('Muscle Normalization:')
+        print('range: \n', self.model.actuator_gainprm[:, 0:2])
+        print('force: ', self.model.actuator_gainprm[:, 2])   # peak active force F0 (N)
         print('L0: ', self.spine.L0)
         print('lmin: ', self.spine.lmin)
         print('lmax: ', self.spine.lmax)
@@ -223,10 +232,12 @@ class Arm26Pendulum(BaseEnvironment, gym.Env):
 
     def set_muscle_strength(self, strength):
         self.muscle_strength[:] = strength
-        self.model.actuator_gainprm[:,3] = (
-            strength * self.default_muscle_strengths
+        self.model.actuator_gainprm[:,2] = (
+            strength * self.default_muscle_gain
         )
-        #print('Muscle strength set to: ', self.model.actuator_gainprm[:,3])
+        self.model.actuator_biasprm[:,2] = (
+            strength * self.default_muscle_bias
+        )
 
 
     def initialize_spine(self, spine):

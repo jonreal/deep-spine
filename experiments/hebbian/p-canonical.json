@@ -1,0 +1,177 @@
+{
+  "log_dir": "./logs/canonical/",
+  "options": {
+    "num_eps": 2000,
+    "seed": 1,
+    "strength_shape": "linear",
+    "ramp_fraction": 0.5,
+    "max_muscle_strength": 0.2
+  },
+  "env_kwargs": {
+    "type": "arm26_babble",
+    "damping": 0,
+    "viscosity": 0.01,
+    "gravity": [
+      0,
+      0,
+      0
+    ],
+    "body_mass": [
+      0,
+      2,
+      1,
+      0
+    ],
+    "relative_muscle_scale": [
+      1,
+      1,
+      0.5,
+      0.5,
+      0.25,
+      0.25
+    ],
+    "episode_length": 90,
+    "muscle_strength": 0.01,
+    "frame_rate": 20,
+    "video_scale": 1,
+    "video_crf": 23,
+    "window_width": 1200,
+    "window_height": 900,
+    "lookat": [
+      0.45,
+      0,
+      -0.5
+    ]
+  },
+  "spine_kwargs": {
+    "type": "ia_reflex",
+    "decimation_factor": 1,
+    "II_length_gain": 1.25,
+    "II_bias": -0.2,
+    "Ia_II_gain": 0.2,
+    "Ia_saturation_constant": 1.5,
+    "Ia_velocity_gain": 1,
+    "muscle_bias": -0.1,
+    "muscle_gain": 1.11,
+    "kalman_gain": 0.3,
+    "shunt_model": "linear",
+    "static_leak": 0.6,
+    "dynamic_leak": 1
+  },
+  "supraspine_kwargs": {
+    "type": "babble",
+    "decimation_factor": 1,
+    "babble_max_prob": 0.0046,
+    "babble_duration_range": [
+      0.05,
+      0.1
+    ],
+    "babble_rise_time_range": [
+      0.5,
+      0.8
+    ],
+    "seed": 1
+  },
+  "hebbian_kwargs": [
+    {
+      "W": "spine.net.W_Ia",
+      "pre": "spine.act_Ia",
+      "post": "spine.act_MN",
+      "gain": 5,
+      "learning_rate": 0.1,
+      "lock_target": false,
+      "min_weight": 0,
+      "max_weight": 1,
+      "Kmean": 4e-05,
+      "Klearn": 0.001,
+      "synaptic_filter": {
+        "order": 1,
+        "cutoff": 0.0005,
+        "type": "high"
+      }
+    }
+  ],
+  "viz": [
+    {
+      "type": "spine_viz",
+      "data": "env.data",
+      "spine": "spine",
+      "supraspine": "supraspine",
+      "xs": 900,
+      "ys": 900,
+      "T": 1,
+      "H": 80,
+      "W": 300,
+      "timestep": "env.model.opt.timestep"
+    },
+    {
+      "type": "hebbian_viz",
+      "learner": "learners[0]",
+      "xs": 20,
+      "ys": 540,
+      "T": 1,
+      "H": 65,
+      "W": 180,
+      "timestep": "env.model.opt.timestep",
+      "legend": false
+    },
+    {
+      "type": "heatmap_geom",
+      "W": "spine.net.W_Ia",
+      "lookat": "env_kwargs.lookat",
+      "center_offset": [
+        -0.9,
+        -1.25,
+        -0.2
+      ],
+      "size": 0.05,
+      "min_weight": 0,
+      "max_weight": 1,
+      "xlabel": [
+        "Ia_SF",
+        "Ia_SE",
+        "Ia_EF",
+        "Ia_EE",
+        "Ia_BF",
+        "Ia_BE"
+      ],
+      "ylabel": [
+        "MN_SF",
+        "MN_SE",
+        "MN_EF",
+        "MN_EE",
+        "MN_BF",
+        "MN_BE"
+      ],
+      "cmap": "white_red",
+      "alpha": 1,
+      "emission": 0,
+      "red_depth": 1.0,
+      "light_gain": 1.25
+    },
+    {
+      "type": "bars_viz",
+      "source": "env.muscle_strength",
+      "xs": 250,
+      "ys": 0,
+      "W": 150,
+      "H": 100,
+      "title": "Muscle Strength",
+      "nbars": 1,
+      "xlim": [
+        0,
+        1
+      ],
+      "ylim": [
+        -1,
+        1
+      ],
+      "gridsize": [
+        5,
+        2
+      ],
+      "ysymmetric": true,
+      "show_selection": true
+    }
+  ]
+}

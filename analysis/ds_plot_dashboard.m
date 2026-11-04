@@ -121,7 +121,7 @@ function ds_plot_dashboard( ...
 
   ylim([0,1]);
   xlim(xl);
-  ylabel('Anti-Synergy')
+  ylabel('Antagonist')
   xticklabels({});
   ax.Color = 'none';
 

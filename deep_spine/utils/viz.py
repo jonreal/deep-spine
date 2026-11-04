@@ -37,7 +37,12 @@ class HeatmapGeom:
         max_weight = 1,
         spacing = 2.15,
         text_color = np.array([0, 0, 0, 0]),
-        plane = "xy"
+        plane = "xy",
+        cmap = "bwr",
+        alpha = 0.15,
+        emission = 1.0,
+        red_depth = 0.5,
+        light_gain = 1.0
     ):
         self.size = size
         self.center = center
@@ -54,6 +59,28 @@ class HeatmapGeom:
         self.spacing = spacing
         self.text_color = text_color
         self.row_ax, self.col_ax, self.thin_ax = self.PLANE_MAP[plane]
+        # cmap: 'bwr'       blue (min) - white (mid) - red (max), the original
+        #       'white_red' white (min) -> red (max), pre-blended to match the
+        #                   paper figures (MATLAB white->red at alpha 0.5 over a
+        #                   white page): R = 1, G = B = 1 - 0.5*w. Use with
+        #                   alpha = 1 -- the viewer background is black.
+        if cmap not in ("bwr", "white_red"):
+            raise ValueError(f"HeatmapGeom: unknown cmap {cmap!r}")
+        self.cmap = cmap
+        self.alpha = alpha
+        # emission adds the cell color on top of the lit color; at 1.0 an
+        # opaque cell with R = 1 saturates to white, so lower it for 'white_red'
+        self.emission = emission
+        # 'white_red' at w = max is (1, 1-red_depth, 1-red_depth); 0.5 matches
+        # the paper colors numerically, but scene lighting brightens geoms, so
+        # a deeper red may be needed for the rendered color to match visually
+        self.red_depth = red_depth
+        # scene lighting multiplies a lit geom's color by ~light_gain (measured
+        # 1.25 for the arm26 scene: diffuse light + headlight) before clipping
+        # at 1, so near-white cells all saturate to white. 'white_red' divides
+        # G and B by light_gain so the RENDERED color is the intended linear
+        # ramp (white at min, full red at max). 1.0 = no compensation.
+        self.light_gain = light_gain
 
     def _offset(self, row_val, col_val, thin_val=0):
         v = np.zeros(3)
@@ -106,6 +133,13 @@ class HeatmapGeom:
                         G = 1 - increase_proportion
                         B = 1 - increase_proportion
 
+                elif self.cmap == "white_red":
+                    w = float(self.W[i][j])
+                    span = self.max_weight - self.min_weight
+                    u = min(max((w - self.min_weight) / span, 0.0), 1.0) if span > 0 else 0.0
+                    R = 1.0
+                    G = (1.0 - self.red_depth*u) / self.light_gain
+                    B = (1.0 - self.red_depth*u) / self.light_gain
                 else:
                     # Your existing code for when W0 is not supplied
                     w = self.W[i][j]
@@ -122,7 +156,7 @@ class HeatmapGeom:
                         G = 1 - scale  # From 1 to 0
                         B = 1 - scale  # From 1 to 0
 
-                w_rgba = np.array([R, G, B, 0.15])
+                w_rgba = np.array([R, G, B, self.alpha])
 
                 center = (
                     self.center
@@ -138,7 +172,7 @@ class HeatmapGeom:
                     mat=np.eye(3).flatten(),
                     rgba=w_rgba
                 )
-                scene.geoms[scene.ngeom].emission = 1.0
+                scene.geoms[scene.ngeom].emission = self.emission
                 scene.geoms[scene.ngeom].specular = 0.0
                 scene.geoms[scene.ngeom].shininess = 0.0
                 scene.ngeom += 1
@@ -521,7 +555,8 @@ def make_heatmap_geom(W, lookat, center_offset, size,
                       min_weight=-1, max_weight=1,
                       xlabel=None, ylabel=None, title=None,
                       notext=False, clone_W0=False, spacing=2.15,
-                      plane="xy"):
+                      plane="xy", cmap="bwr", alpha=0.15,
+                      emission=1.0, red_depth=0.5, light_gain=1.0):
     """Factory for HeatmapGeom."""
     center = lookat + np.array(center_offset)
     W0 = W.clone().detach() if clone_W0 else None
@@ -538,7 +573,12 @@ def make_heatmap_geom(W, lookat, center_offset, size,
         title=title,
         notext=notext,
         spacing=spacing,
-        plane=plane
+        plane=plane,
+        cmap=cmap,
+        alpha=alpha,
+        emission=emission,
+        red_depth=red_depth,
+        light_gain=light_gain
     )
     return [geom]
 
