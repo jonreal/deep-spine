@@ -1,5 +1,5 @@
-function plot_boxjitter(ax, groups, opt)
-% PLOT_BOXJITTER Boxplot with deterministic jittered scatter overlay.
+function ds_plot_boxjitter(ax, groups, opt)
+% DS_PLOT_BOXJITTER Boxplot with deterministic jittered scatter overlay.
   arguments
     ax
     groups cell               % cell array of numeric vectors, one per group

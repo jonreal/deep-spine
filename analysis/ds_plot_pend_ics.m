@@ -1,5 +1,5 @@
-function plot_pend_ics(ax, pend, c, opt)
-% PLOT_PEND_ICS  Draw pendulum lines for each IC coloured by c value.
+function ds_plot_pend_ics(ax, pend, c, opt)
+% DS_PLOT_PEND_ICS  Draw pendulum lines for each IC coloured by c value.
 %   pend : (N,1) pendulum angles in rad (0=balanced up, ±pi=hanging down)
 %   c    : (N,1) colour values in [0,1]
   arguments

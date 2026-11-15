@@ -1,5 +1,5 @@
-function plot_arm_configs(ax, q0, q1, c, opt)
-% PLOT_ARM_CONFIGS Render 2-link arm configurations as colored patches.
+function ds_plot_arm_configs(ax, q0, q1, c, opt)
+% DS_PLOT_ARM_CONFIGS Render 2-link arm configurations as colored patches.
   arguments
     ax
     q0 (:,1) double           % shoulder angles

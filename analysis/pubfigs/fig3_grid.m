@@ -1,22 +1,27 @@
-% PUBPLOT_GC_2  Fig 3: Ia->MN weight trajectories as a 6x6 grid, with the
+function fig3_grid(data_root, out_dir, trial)
+%FIG3_GRID  Fig 3: Ia->MN weight trajectories as a 6x6 grid, with the
 % muscle-level motif time courses and limb kinematics as extra columns.
 %
-% Script -- expects the high-rate trial in the workspace:
-%   [S,W,P] = ds_load_trial('../experiments/hebbian/logs/<exp>/<sim-id>');
-%   pubplot_gc_2
+%   fig3_grid()                          canonical run from <repo>/logs
+%   fig3_grid(data_root, out_dir, trial) trial from LOAD_CANONICAL (reused)
+% Writes <out_dir>/grid.pdf.
 %
 % Columns 1-6: w_ij(t) for MN i (rows) <- Ia j (columns), each trace colored
 %   by its motif class and muscle pool exactly as in the Fig 2 legend.
 % Column 7:    pool motif coefficients (reflex, synergy, antagonist) for the
-%   S, E, B pools, from DS_IA_MOTIF on the decimated weights (the same
+%   S, E, B pools, from DS_FIT_MOTIF on the decimated weights (the same
 %   computation as Fig 2).
 % Column 8:    RMS joint angle (excursion from the q = 0 rest posture) and
 %   RMS joint velocity per window, shoulder and elbow.
 
-if ~exist('S','var') || ~exist('W','var')
-  error('pubplot_gc_2:noData', ...
-    'Load the trial first: [S,W,P] = ds_load_trial(root);');
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+  trial struct = struct()
 end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
+if isempty(fieldnames(trial)), trial = load_canonical(data_root, dW=false); end
+S = trial.S;  W = trial.W;
 
 % ---------------------------------------------------
 % Parameters
@@ -50,7 +55,7 @@ cKin  = [0.3 0.3 0.3; 0.65 0.65 0.65];   % shoulder, elbow
 % ---------------------------------------------------
 % Decimated weights -> motif regression
 % ---------------------------------------------------
-[nMN, nIa, T] = gc_wsize(W);
+[nMN, nIa, T] = ds_w_size(W);
 dp  = max(1, ceil(T/plotN));
 ip  = 1:dp:T;
 t_h = ip/fs/3600;
@@ -58,12 +63,12 @@ t_h = ip/fs/3600;
 Wdec = zeros(numel(ip), nMN, nIa);
 for i = 1:nMN
   for j = 1:nIa
-    wij = gc_wtrace(W, i, j);
+    wij = ds_w_trace(W, i, j);
     Wdec(:,i,j) = double(wij(ip));
   end
 end
 We    = arrayfun(@(k) squeeze(Wdec(k,:,:)), 1:numel(ip), 'UniformOutput', false);
-motif = ds_Ia_motif(We);
+motif = ds_fit_motif(We);
 
 % per-cell color from the pool masks (columns: r_S r_E r_B s_S ... a_B)
 cls_col = {cR, cS, cA};
@@ -102,7 +107,7 @@ xtl   = compose('%g', xt);
 xtl(2:2:end) = {''};     % label 0, mid, end only: full labels collide across tiles
 ncol  = nIa + 2;
 
-figure('Position', [100 100 fwidth fheight]);
+fig = figure('Position', [100 100 fwidth fheight]);
 tl = tiledlayout(nMN, ncol, 'TileSpacing', 'compact', 'Padding', 'compact');
 
 % ---- weight grid
@@ -189,3 +194,6 @@ drawnow;
 axMotif1.Units = 'normalized';  lgMotif.Units = 'normalized';
 lgMotif.Position(2) = axMotif1.Position(2) + legYFrac*axMotif1.Position(4) ...
                       - lgMotif.Position(4)/2;
+
+save_pdf(fig, fullfile(out_dir, 'grid.pdf'));
+end

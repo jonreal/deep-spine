@@ -1,4 +1,4 @@
-"""Export musculoskeletal plant data for the SI plant figure (pubplots_si_6.m).
+"""Export musculoskeletal plant data for the SI plant figure (figS5_plant.m).
 
 Queries the arm26 MuJoCo model directly, so every panel reflects the model as
 simulated:
@@ -10,8 +10,8 @@ simulated:
     parameters, normalized by peak force F0
 
 Usage (repo root, venv active):
-    python analysis/si_plant_export.py
-writes analysis/si_plant.mat
+    python analysis/pubfigs/export_plant.py
+writes analysis/pubfigs/out/si_plant.mat
 """
 import os
 import numpy as np
@@ -19,8 +19,9 @@ import mujoco
 from scipy.io import savemat
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-XML = os.path.join(HERE, '..', 'deep_spine', 'environments', 'arm26.xml')
-OUT = os.path.join(HERE, 'si_plant.mat')
+XML = os.path.join(HERE, '..', '..', 'deep_spine', 'environments', 'arm26.xml')
+OUT = os.path.join(HERE, 'out', 'si_plant.mat')
+os.makedirs(os.path.dirname(OUT), exist_ok=True)
 
 m = mujoco.MjModel.from_xml_path(XML)
 d = mujoco.MjData(m)

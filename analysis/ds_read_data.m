@@ -1,4 +1,4 @@
-function [episode, time, muscle_strength, Wi, We] = extract_data(path)
+function [episode, time, muscle_strength, Wi, We] = ds_read_data(path)
 
   ncols = 39;  % episode, time, muscle_strength, W_Ia(36)
 

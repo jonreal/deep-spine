@@ -69,7 +69,7 @@ function R = gc_batch(S,W,opt)
       fprintf('Running gc_run i=%d, j=%d\n', i, j);
       % Weight fate is recorded for every connection, including those gc_run
       % prunes, so the table shows why a cell came back NaN.
-      wtr = gc_wtrace(W, i, j);
+      wtr = ds_w_trace(W, i, j);
       w_init(i,j)  = wtr(1);
       w_final(i,j) = wtr(end);
       w_net(i,j)   = wtr(end) - wtr(1);

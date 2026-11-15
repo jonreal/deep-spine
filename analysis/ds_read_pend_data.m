@@ -1,7 +1,7 @@
-function S = extract_pend_data(root)
-% EXTRACT_PEND_DATA  Read binary env.txt from arm26_pendulum simulation.
+function S = ds_read_pend_data(root)
+% DS_READ_PEND_DATA  Read binary env.txt from arm26_pendulum simulation.
 %
-%   S = extract_pend_data(ROOT) reads ROOT/env.txt and returns a struct
+%   S = ds_read_pend_data(ROOT) reads ROOT/env.txt and returns a struct
 %   with fields matching the arm26_pendulum _write_data_to_logfile layout.
 %
 %   Each field is a cell array indexed by episode. Access:

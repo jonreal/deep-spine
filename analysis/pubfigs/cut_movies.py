@@ -1,8 +1,8 @@
 """Cut real-time SI clips out of the canonical run's sim.mp4.
 
 Usage (repo root, venv active):
-    python analysis/si_cut_movies.py <path/to/sim.mp4> [outdir] [names]
-Default outdir: manuscript/si. Writes si-movie-start.mp4 / -early.mp4 / -late.mp4
+    python analysis/pubfigs/cut_movies.py <path/to/sim.mp4> [outdir] [names]
+Default outdir: analysis/pubfigs/out. Writes si-movie-start.mp4 / -early.mp4 / -late.mp4
 / -end.mp4; [names] is an optional comma list (e.g. end) to cut only those.
 
 Frame mapping (frames are rendered after each physics step, so each episode's
@@ -11,9 +11,9 @@ t = 0 frame is skipped):
     frame f  ->  episode e = f // FPE,  time = EP*e + (f % FPE + 1)/FR   (s)
 The video is written at VFPS = 10*FR (10x real time).
 
-Each clip is WIN seconds long and time-locked to Fig. S2: the early and late
-clips are centred on the Fig. S2 10 s windows (sample indices chosen by
-pubplots_si_1.m at fs = 200 Hz); the start clip begins at t = 0. Output frame i
+Each clip is WIN seconds long and time-locked to Fig. S3: the early and late
+clips are centred on the Fig. S3 10 s windows (sample indices chosen by
+figS3_timehistory.m at fs = 200 Hz); the start clip begins at t = 0. Output frame i
 shows the simulated instant t0 + i/FR, using the most recent rendered frame at
 or before it (sample-and-hold; the first frame is used for instants before the
 first render). Clips are therefore exactly WIN*FR frames at a constant FR fps:
@@ -34,7 +34,7 @@ FS   = 200                # log sampling rate (Hz)
 WIN  = 20.0               # clip length (s)
 CRF  = 18
 
-# Fig. S2 10 s windows: start sample index (fs = 200). Clips are centred on
+# Fig. S3 10 s windows: start sample index (fs = 200). Clips are centred on
 # them; 'start' is the beginning of the run.
 SI_WIN = 10.0
 NEP  = 2000               # episodes in the canonical run
@@ -61,8 +61,9 @@ def first_frame_at_or_after(t):
 
 def main():
     src = sys.argv[1]
-    outdir = sys.argv[2] if len(sys.argv) > 2 else os.path.join('manuscript', 'si')
+    outdir = sys.argv[2] if len(sys.argv) > 2 else os.path.join('analysis', 'pubfigs', 'out')
     only = sys.argv[3].split(',') if len(sys.argv) > 3 else list(wins)
+    os.makedirs(outdir, exist_ok=True)
     W, H = map(int, subprocess.run(
         ['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
          'stream=width,height', '-of', 'csv=p=0', src],

@@ -1,4 +1,17 @@
-clear all;
+function fig2_motif(data_root, out_dir)
+%FIG2_MOTIF  Fig 2: motif regression. Motif legend (panel A) and, for six
+% example runs, reflex / synergy / antagonist coefficients over time with W
+% snapshots and the final motif spectrum. Writes <out_dir>/motif-regression.pdf.
+%
+% Example runs (SR0-MR0, lambda_max = 0.2) are found by parameters with
+% DS_FIND_RUN: row 1 kappa = 2, row 2 kappa = 5; columns p_b = 0.0028,
+% 0.0046, 0.0215.
+
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
 
 LW = 1;
 BW = 0.55; 
@@ -73,114 +86,29 @@ row_h    = up_off + down_off;                   % full vertical footprint / bloc
 % (yref_of and the auto-derived inter-block gap ysp_block are set after nblock)
 
 % ---------------------------------------------------
-% Nominal model -- diag organization
+% Example runs, found by parameters (DS_FIND_RUN): two row blocks (kappa 2,
+% kappa 5) x three babble levels (reflex-only, synergist, maladaptive), all
+% at lambda_max = 0.2 in the SR0-MR0 body
 % ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0-gain/', ...
-      '1787087457'];
+sweep  = fullfile(data_root, 'hebbian-sweep');
+blocks = struct('cond', {'SR0-MR0-gain', 'SR0-MR0'}, 'gain', {2, 5});
+pbs    = [0.0028 0.0046 0.0215];
+lam    = 0.2;
 
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-data1 = {motif,We};
-
-[keys, vals] = extract_parameters(ex0);
-gain1 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str1 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob1 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-% ---------------------------------------------------
-% Nominal model -- synergist organization
-% ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0-gain/', ...
-      '1787087482'];
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-
-[keys, vals] = extract_parameters(ex0);
-gain2 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str2 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob2 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-data2 = {motif,We};
-
-% ---------------------------------------------------
-% Nominal model -- maladaptive organization
-% ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0-gain/', ...
-      '1787087512'];
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-
-[keys, vals] = extract_parameters(ex0);
-gain3 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str3 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob3 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-data3 = {motif,We};
-
-% ---------------------------------------------------
-Data1 = {data1, data2, data3};
-P1 = {{gain1,str1,prob1},{gain1,str2,prob2},{gain3,str3,prob3}};
-
-% ---------------------------------------------------
-% Nominal model -- diag organization
-% ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0/', ...
-      '1786936211'];
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-data1 = {motif,We};
-
-[keys, vals] = extract_parameters(ex0);
-gain1 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str1 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob1 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-% ---------------------------------------------------
-% Nominal model -- synergist organization
-% ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0/', ...
-      '1786936221'];
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-
-[keys, vals] = extract_parameters(ex0);
-gain2 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str2 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob2 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-data2 = {motif,We};
-
-% ---------------------------------------------------
-% Nominal model -- maladaptive organization
-% ---------------------------------------------------
-root = '../experiments/hebbian/logs/hebbian-sweep/';
-ex0 = [root, 'SR0-MR0/', ...
-      '1786936250'];
-
-% Extract data
-[episode, time, muscle_strength, Wi, We] = extract_data([ex0,'/data.txt']);
-motif = ds_Ia_motif(We);
-
-[keys, vals] = extract_parameters(ex0);
-gain3 = str2num(cell2mat(vals(strcmp(keys,'heb_kwa_gai') == 1)));
-str3 = str2num(cell2mat(vals(strcmp(keys,'opt_max_mus_str') == 1)));
-prob3 = str2num(cell2mat(vals(strcmp(keys,'sup_kwa_bab_max_pro') == 1)));
-
-data3 = {motif,We};
-
-% ---------------------------------------------------
-Data2 = {data1, data2, data3};
-P2 = {{gain1,str1,prob1},{gain2,str2,prob2},{gain3,str3,prob3}};
+nblock     = numel(blocks);
+DataBlocks = cell(1, nblock);
+Pblocks    = cell(1, nblock);
+for rb = 1:nblock
+  for c = 1:numel(pbs)
+    ex0 = ds_find_run(fullfile(sweep, blocks(rb).cond), ...
+                      gain=blocks(rb).gain, strength=lam, babble=pbs(c));
+    fprintf('Fig 2 row %d col %d: %s\n', rb, c, ex0);
+    [~, ~, ~, ~, We] = ds_read_data(fullfile(ex0, 'data.txt'));
+    motif = ds_fit_motif(We);
+    DataBlocks{rb}{c} = {motif, We};
+    Pblocks{rb}{c}    = {blocks(rb).gain, lam, pbs(c)};
+  end
+end
 
 nmaxs1 = {180000,180000,180000};
 nmaxs2 = {180000,180000,180000};
@@ -188,12 +116,7 @@ nmaxs2 = {180000,180000,180000};
 % data.txt is logged at 1 Hz, so sample index = sim seconds; plot in hours
 tscale = 1/3600;
 
-% Row-blocks: reuse the same three columns for both rows for now. To use
-% different data in row 2 (E-G), replace DataBlocks{2} / Pblocks{2} / nmaxblocks{2}.
-DataBlocks = {Data1, Data2};
-Pblocks    = {P1,    P2};
 nmaxblocks = {nmaxs1, nmaxs2};
-nblock     = numel(DataBlocks);
 
 % Auto-space the blocks to fill [y_bot, y_sep-gap_top] (no leftover at bottom).
 if nblock > 1
@@ -225,7 +148,7 @@ cmap2 = [red];
 %cmap2 = pink(1024);
 
 % Figure
-figure('position',[1440 818 fwidth fheight]);
+fig = figure('position',[1440 818 fwidth fheight]);
 
 xmargin = 0.075;
 ymargin = 0.1;
@@ -241,7 +164,7 @@ lab = {'S','E','B'};
 shade = linspace(0.5,1,3);
 
 xs = 0.05;
-xs_fudge = 0.035
+xs_fudge = 0.035;
 ys = y_leg_bot;   % legend pinned to the top (see y_leg_bot in derived section)
 
 shift = ann_shift;
@@ -613,6 +536,9 @@ for rb=1:nblock
     ann = annotation('line', [x_div, x_div], [y_bottom, y_top]);
     ann.Color = [0.75, 0.75, 0.75];
   end
+end
+
+save_pdf(fig, fullfile(out_dir, 'motif-regression.pdf'));
 end
 
 % -------------------------------------------------------------------------

@@ -1,8 +1,9 @@
-% PUBPLOTS_SI_1  SI figure: multi-scale time history of the canonical run.
+function figS3_timehistory(data_root, out_dir, trial)
+%FIGS3_TIMEHISTORY  SI figure: multi-scale time history of the canonical run.
 %
-% Script -- expects the high-rate trial in the workspace:
-%   [S,W,P] = ds_load_trial('../experiments/hebbian/logs/example-3/1790298957');
-%   pubplots_si_1
+%   figS3_timehistory()                          canonical run from <repo>/logs
+%   figS3_timehistory(data_root, out_dir, trial) trial from LOAD_CANONICAL (reused)
+% Writes <out_dir>/si-timehistory.pdf.
 %
 % Symmetric zoom cascade, full run in the centre:
 %   [early 1 s | early 10 s | full 50 h | late 10 s | late 1 s]
@@ -29,10 +30,14 @@
 %                connection inside its 10 s window, excluding the outer
 %                win_sec at each end so the 1 s band sits inside the panel
 
-if ~exist('S','var') || ~exist('W','var') || ~exist('P','var')
-  error('pubplots_si_1:noData', ...
-    'Load the trial first: [S,W,P] = ds_load_trial(root);');
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+  trial struct = struct()
 end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
+if isempty(fieldnames(trial)), trial = load_canonical(data_root, dW=false); end
+S = trial.S;  W = trial.W;  P = trial.P;
 
 % ---------------------------------------------------
 % Parameters
@@ -93,7 +98,7 @@ ell  = zeros(N, nc, 'single');     % eligibility
 pre  = double(S.act_Ia(:, jPre));
 for c = 1:nc
   post = double(S.act_MN(:, conn(c).i));
-  wij  = double(gc_wtrace(W, conn(c).i, conn(c).j));  wij = wij(:);
+  wij  = double(ds_w_trace(W, conn(c).i, conn(c).j));  wij = wij(:);
   h    = pre .* wij .* ...
          (kappa*filter(bh, ah, post) - filter([0 Kmean], [1 Kmean-1], post));
   heb(:,c) = single(h);
@@ -168,7 +173,7 @@ qdlim = pad([min(S.qvel(zoomIdx,:),[],'all'), max(S.qvel(zoomIdx,:),[],'all')]);
 elim  = 1.1*max(abs(ell([midE; midL],:)),[],'all') * [-1 1];
 hlim  = 1.1*max(abs(heb([secE; secL],:)),[],'all') * [-1 1];
 
-figure('Position', [50 50 fwidth fheight], 'Color', 'w');
+fig = figure('Position', [50 50 fwidth fheight], 'Color', 'w');
 tl = tiledlayout(nrow, ncol, 'TileSpacing', 'compact', 'Padding', 'compact');
 ax = gobjects(nrow, ncol);
 
@@ -292,6 +297,9 @@ legLab = [arrayfun(@(k) sprintf('%s (%s)', conn(k).mus, conn(k).name), 1:nc, 'Un
           {'Ia_{SF}', 'Shoulder', 'Elbow', '\lambda'}];
 lgd = legend(ax(1,1), hl, legLab, 'Box', 'off', 'FontSize', fontsize-1);
 lgd.Layout.Tile = 'east';
+
+save_pdf(fig, fullfile(out_dir, 'si-timehistory.pdf'));
+end
 
 % =========================================================================
 % Local helpers

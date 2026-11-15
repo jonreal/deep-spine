@@ -13,13 +13,13 @@ function R = gc_event_grid(W, opt)
 %   A SECOND figure reproduces the dashboard's motif regression from this
 %   high-fidelity weight log, on the same time axis in seconds, so the event
 %   grid and the dashboard motif panels can be read against each other. The
-%   regression is DS_IA_MOTIF itself, applied to a decimated slice of W, so it
+%   regression is DS_FIT_MOTIF itself, applied to a decimated slice of W, so it
 %   is the identical computation the dashboards use -- not a reimplementation.
 %
 %   R = gc_event_grid(W, ...)
 %     R.n_events - nMN x nIa count of selected events per connection
 %     R.pruned   - nMN x nIa logical, connections gc_run would skip
-%     R.motif    - the DS_IA_MOTIF output (empty if motif=false)
+%     R.motif    - the DS_FIT_MOTIF output (empty if motif=false)
 %     R.motif_t  - time axis (s) for the motif traces
 %
 %   Name-value options (forwarded to gc_weight_events):
@@ -44,7 +44,7 @@ function R = gc_event_grid(W, opt)
     opt.plotN  (1,1) double  = 2e4     % points drawn per trace panel
   end
 
-  [nMN, nIa, T] = gc_wsize(W);
+  [nMN, nIa, T] = ds_w_size(W);
   t_s = (1:T)/opt.fs;                 % time axis (s)
 
   % Decimate only what is DRAWN. At 200 Hz over hours this grid is 36 panels x
@@ -143,7 +143,7 @@ function [motif, t_s] = motif_pools(Wdec, t_s, m)
 % so B has orthogonal columns and pinv(B) = B'/2. Each of the 18 coefficients
 % is therefore exactly the MEAN of its two cells, and each pool coefficient is
 % the mean of its member cells. Computing it that way here (rather than calling
-% ds_Ia_motif) is deliberate: it is what makes the column verifiable by eye
+% ds_fit_motif) is deliberate: it is what makes the column verifiable by eye
 % against the grid to its left.
 %
 % For pool p (muscle rows 2p-1, 2p):

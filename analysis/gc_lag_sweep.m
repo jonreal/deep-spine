@@ -6,8 +6,14 @@
 % partialR2_Ia = incremental kinematic variance explained given Ia
 % dBIC_Ia      = BIC_unrestricted - BIC_restricted
 %                negative values favor adding kinematics
+%
+% Script -- expects the canonical trial and its rule-computed dW in the workspace,
+% the same inputs as Fig 4 (gc_batch defaults gate events at loFrac 0, hiFrac 0.9):
+%   root = '<repo>/logs/hebbian-canonical/1790298957';
+%   [S,W,P] = ds_load_trial(root);  dW = ds_load_dw_rule(root);
+%   gc_lag_sweep
 
-clearvars -except S W
+clearvars -except S W P dW
 
 fs = 200;
 
@@ -33,6 +39,7 @@ for k = 1:nLag
         S, W, ...
         lag     = lag_range(k), ...
         feature = method, ...
+        dWrule  = dW, ...
         plot    = false);
 
     assert(isequal(size(R.partialR2_Ia), [6 6]), ...

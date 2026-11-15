@@ -65,7 +65,7 @@ function R = gc_histogram(W, opt)
     opt.verbose (1,1) logical = true
   end
 
-  [nMN, nIa] = gc_wsize(W);
+  [nMN, nIa] = ds_w_size(W);
   R = struct('direction',{},'n_events',{},'n_unique',{},'min_band',{},'fig',{});
 
   for d = 1:numel(opt.directions)

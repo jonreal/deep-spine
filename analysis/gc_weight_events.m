@@ -1,6 +1,6 @@
 function [loc, pks, wij, dw, pruned] = gc_weight_events(W, i, j, opt)
 %GC_WEIGHT_EVENTS  Detect weight-change events for connection (i,j).
-%   Extracts the weight trace W(i,j) via GC_WTRACE (so W may be a cell
+%   Extracts the weight trace W(i,j) via DS_W_TRACE (so W may be a cell
 %   array or flat (m*m) x N storage), computes its positive rate of
 %   change, finds peaks, gates them to the rising portion of the weight
 %   (between 20% and 90% of max), and keeps the top opt.pct percent of
@@ -71,11 +71,11 @@ function [loc, pks, wij, dw, pruned] = gc_weight_events(W, i, j, opt)
 
   dt = 1/opt.fs;
 
-  wij    = gc_wtrace(W, i, j);
+  wij    = ds_w_trace(W, i, j);
   if isempty(opt.dWrule)
     dw = gradient(wij)/dt;
   else
-    s  = gc_wtrace(opt.dWrule, i, j);       % s(k) = W(k) - W(k-1), unrounded
+    s  = ds_w_trace(opt.dWrule, i, j);       % s(k) = W(k) - W(k-1), unrounded
     dw = [s(2), (s(2:end-1) + s(3:end))/2, s(end)]/dt;
   end
   switch opt.direction

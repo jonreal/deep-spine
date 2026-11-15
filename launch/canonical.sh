@@ -15,8 +15,8 @@
 #   sim.mp4                            full run at 10x real time (~20 GB)
 #   si-clips/si-movie-*.mp4            Movies S1-S4
 #
-# Runs about 50 h. Stop it with Ctrl-C in this terminal so the video is
-# finalized.
+# 2000 episodes = 50 h simulated; about 18 h wall clock with video. Stop it
+# with Ctrl-C in this terminal (not under parallel) so the video is finalized.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -46,5 +46,4 @@ RUN="$LOG_ROOT/$(ls "$LOG_ROOT" | grep -E '^[0-9]+$' | sort -n | tail -1)"
 echo "run: $RUN"
 
 python analysis/export_dw_rule.py "$RUN"
-mkdir -p "$RUN/si-clips"
-python analysis/si_cut_movies.py "$RUN/sim.mp4" "$RUN/si-clips"
+python analysis/pubfigs/cut_movies.py "$RUN/sim.mp4" "$RUN/si-clips"

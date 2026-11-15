@@ -1,4 +1,4 @@
-function motif = ds_Ia_motifs(W,opt)
+function motif = ds_fit_motif(W,opt)
   arguments
     W
     opt.show_basis = false

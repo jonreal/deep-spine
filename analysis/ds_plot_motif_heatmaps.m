@@ -1,15 +1,15 @@
-function ds_hm_motif(tab, opt)
-%DS_HM_MOTIF  Sweep heatmaps of the motif metrics vs (babble, strength).
+function ds_plot_motif_heatmaps(tab, opt)
+%DS_PLOT_MOTIF_HEATMAPS  Sweep heatmaps of the motif metrics vs (babble, strength).
 %   One ROW per Hebbian gain (kappa); columns = mean Reflex (R), Synergy (S),
 %   Antagonist (A), and selectivity S-A. Each panel interpolates the metric
-%   over the (p_b, lambda_max) grid via plot_heatmap, with babble probability
+%   over the (p_b, lambda_max) grid via ds_plot_heatmap, with babble probability
 %   p_b (the dominant driver) on x and strength lambda_max on y.
 %
-%   ds_hm_motif(summary_table)
-%   ds_hm_motif(summary_table, cmap=magma(1024))
+%   ds_plot_motif_heatmaps(summary_table)
+%   ds_plot_motif_heatmaps(summary_table, cmap=turbo(1024))
   arguments
     tab
-    opt.cmap = magma(1024);
+    opt.cmap = turbo(1024);
     opt.selzl = [0 0.30];        % selectivity range; S-A spans ~[-0.01, 0.30]
     opt.selcmap = [];            % [] -> built-in white->teal ramp
     opt.selectivity (1,1) logical = true   % false: drop the S-A column and its colorbar
@@ -26,7 +26,7 @@ function ds_hm_motif(tab, opt)
   zfields = {'r_mean','s_mean','a_mean','sel_mean'};
   ctitles = {'Reflex (R)','Synergy (S)','Antagonist (A)','Selectivity (S - A)'};
 
-  % plot_heatmap log-scales y only, so p_b is passed as log10(p_b) on a linear
+  % ds_plot_heatmap log-scales y only, so p_b is passed as log10(p_b) on a linear
   % x-axis (interpolation then happens in log space) with 10^k tick labels.
   xl = log10([0.001 0.1]);
   yl = [0.1 1];
@@ -70,7 +70,7 @@ function ds_hm_motif(tab, opt)
 
       xtl = (i==nrows) && (c==1);   % tick labels only on the bottom-left panel
       ytl = (i==nrows) && (c==1);
-      plot_heatmap(ax,x,y,z, xl=xl,yl=yl,zl=zls{c},scale='linear', ...
+      ds_plot_heatmap(ax,x,y,z, xl=xl,yl=yl,zl=zls{c},scale='linear', ...
                    XTick=[-3 -2 -1], YTick=linspace(0.1,1,4), ...
                    XTickLabel={'10^{-3}','10^{-2}','10^{-1}'}, ...
                    XTickLabels=xtl, YTickLabels=ytl, cmap=cmaps{c});

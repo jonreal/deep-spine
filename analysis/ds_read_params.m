@@ -1,4 +1,4 @@
-function [keys, vals] = extract_parameters(path)
+function [keys, vals] = ds_read_params(path)
     % Returns keys and vals as cell arrays of strings.
     % Both are empty ({}) when no custom.txt exists.
     path_to_parameters = fullfile(path, 'custom.txt');
@@ -13,7 +13,7 @@ function [keys, vals] = extract_parameters(path)
     p = jsondecode(raw);
 
     % Recursively extract all leaf parameter keys and values
-    leaves = extract_leaves(p);
+    leaves = ds_flatten_struct(p);
 
     % Truncate each section of keys to 3 characters. Clamp the cut position to
     % the token length so parts shorter than 3 chars (e.g. "Ia", "II") are kept

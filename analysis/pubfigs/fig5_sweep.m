@@ -1,4 +1,9 @@
-% Cross-embodiment comparison: motif sweeps + example final-W / motif spectra.
+function fig5_sweep(data_root, out_dir, opt)
+%FIG5_SWEEP  Fig 5: cross-embodiment comparison: motif sweeps + example
+% final-W / motif spectra. Writes <out_dir>/sweep.pdf (raster, 500 ppi).
+%
+%   fig5_sweep()
+%   fig5_sweep(data_root, out_dir, tags={...}, outFile='...')   (Fig S4: MR1 rows)
 %
 % Left : reflex / synergy / antagonist motif strength over the (p_b, lambda_max)
 %        sweep, p_b on x (log), lambda_max on y, one row per embodiment.
@@ -13,13 +18,21 @@
 % A body whose summary table is missing ([] path) keeps its row, labels and
 % axis furniture with no data drawn, so the layout never changes shape.
 
-root = '../experiments/hebbian/logs/hebbian-sweep/';
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+  % MR0 bodies only; the MR1 rows (mass ratio has little effect) go to the SI.
+  opt.tags cell = {'SR0-MR0','SR1-MR0','SR2-MR0'}
+  opt.outFile (1,:) char = 'sweep.pdf'
+end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
+
+root = [fullfile(data_root, 'hebbian-sweep'), filesep];
 
 % Hebbian gain slice to plot. Every sweep must contain this value.
 heb_gain = 5;
 
-% MR0 bodies only; the MR1 rows (mass ratio has little effect) go to the SI.
-tags = {'SR0-MR0','SR1-MR0','SR2-MR0'};
+tags = opt.tags;
 paths_all = cellfun(@(t) {[root, t, '/analysis/summary/summary_table.mat']}, ...
                     tags, 'UniformOutput', false);
 
@@ -47,7 +60,7 @@ end
 
 has_data = cellfun(@(p) exist(p{1}, 'file') == 2, paths_all);
 if ~any(has_data)
-  error('pubplot_fig2_alt5:noRows', 'No summary tables found under %s.', root);
+  error('fig5_sweep:noRows', 'No summary tables found under %s.', root);
 end
 fprintf('Rows with data: %s of 1..%d\n', ...
         strjoin(string(find(has_data)), ','), numel(has_data));
@@ -69,7 +82,7 @@ ncols = 3;
 tab_ok = tab(has_data);
 alllam = cell2mat(cellfun(@(T) T.opt_max_mus_str(:),     tab_ok, 'UniformOutput', false));
 allpb  = cell2mat(cellfun(@(T) T.sup_kwa_bab_max_pro(:), tab_ok, 'UniformOutput', false));
-% plot_heatmap log-scales y only, so p_b is passed as log10(p_b) on a linear
+% ds_plot_heatmap log-scales y only, so p_b is passed as log10(p_b) on a linear
 % x-axis (interpolation in log space) with 10^k tick labels.
 xl = log10([min(allpb) max(allpb)]);
 yl = [min(alllam) max(alllam)];
@@ -112,7 +125,7 @@ x_hm0      = xpad + wlabs;
 x_hm_right = x_hm0 + ncols*w + (ncols-1)*xsp;
 x_sum0     = x_hm_right + gap_div;
 
-% weight-matrix colormap + alpha (match pubplot_fig1)
+% weight-matrix colormap + alpha (match Fig 2)
 hmalpha = 0.5;
 nW   = 2048;
 blue = [linspace(0,1,nW/2)', linspace(0,1,nW/2)', ones(nW/2,1)];
@@ -129,7 +142,7 @@ cmapSweep = turbo(1024);
 %cmapSweep = viridis(1024);
 
 
-% motif group colors + shading (match pubplot_fig1)
+% motif group colors + shading (match Fig 2)
 cvR = 0.6;  cvS = 0.0;  cvA = -0.9;
 cmapP = parula;  nP = size(cmapP,1);
 v2i = @(v) round((v - (-1)) / (1 - (-1)) * (nP - 1)) + 1;
@@ -166,7 +179,7 @@ for i = 1:n
   if rowHasData
     iq = find(tab{i}.('heb_kwa_gai') == heb_gain);
     if isempty(iq)
-      error('pubplot_fig2_alt5:noGain', ...
+      error('fig5_sweep:noGain', ...
         'Row %d (%s) has no entries at heb_kwa_gai = %g. Available: %s.', ...
         i, tags{i}, heb_gain, mat2str(unique(tab{i}.('heb_kwa_gai'))'));
     end
@@ -187,7 +200,7 @@ for i = 1:n
               'TickDir','out', ...
               'XTickLabels',tl, 'YTickLabels',tl};
     if rowHasData
-      plot_heatmap(ax, x, y, tab{i}.(zfields{c})(iq), hmArgs{:}, cmap=cmapSweep);
+      ds_plot_heatmap(ax, x, y, tab{i}.(zfields{c})(iq), hmArgs{:}, cmap=cmapSweep);
     else
       blank_heatmap(ax, hmArgs{:});
     end
@@ -281,11 +294,14 @@ for axb = findall(fig, 'Tag', 'motifBarBottom')'
   axb.XAxis.FontSize = fontsize - 1;
 end
 
+save_pdf(fig, fullfile(out_dir, opt.outFile), 500);
+end
+
 % =========================================================================
 % Local helpers
 % =========================================================================
 function blank_heatmap(ax, opt)
-  % The axis furniture of PLOT_HEATMAP with no surface drawn: used for rows
+  % The axis furniture of DS_PLOT_HEATMAP with no surface drawn: used for rows
   % whose dataset is not available, so the grid keeps its exact geometry.
   arguments
     ax
@@ -330,7 +346,7 @@ function exDir = find_example(T, pt, heb_gain, bodyDir)
            abs(T.sup_kwa_bab_max_pro - pt.pb) < 1e-6 & ...
            T.('heb_kwa_gai') == heb_gain, 1);
   if isempty(k)
-    warning('pubplot_fig2_alt5:noPoint', 'No run at p_b=%g, lambda_max=%g in %s', ...
+    warning('fig5_sweep:noPoint', 'No run at p_b=%g, lambda_max=%g in %s', ...
             pt.pb, pt.lam, bodyDir);
     exDir = '';
     return
@@ -341,8 +357,8 @@ end
 
 function [finalW, D] = load_example(exampleDir)
   % Final weight matrix and the (last-200-step mean) motif spectrum.
-  [~,~,~,~,We] = extract_data([exampleDir,'/data.txt']);
-  motif  = ds_Ia_motif(We);
+  [~,~,~,~,We] = ds_read_data([exampleDir,'/data.txt']);
+  motif  = ds_fit_motif(We);
   finalW = We{end};
   w200 = max(1, size(motif.rp,1)-199) : size(motif.rp,1);
   D = [mean(motif.rp(w200,:),1), ...

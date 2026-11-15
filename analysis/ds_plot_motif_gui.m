@@ -1,12 +1,12 @@
-function ds_hm_motif_gui(tab, opt)
-%DS_HM_MOTIF_GUI  Clickable version of DS_HM_MOTIF: click a cell, open its dashboard.
+function ds_plot_motif_gui(tab, opt)
+%DS_PLOT_MOTIF_GUI  Clickable version of DS_PLOT_MOTIF_HEATMAPS: click a cell, open its dashboard.
 %
-%   Draws the usual motif heatmap grid by calling DS_HM_MOTIF (which is left
+%   Draws the usual motif heatmap grid by calling DS_PLOT_MOTIF_HEATMAPS (which is left
 %   untouched), then makes every panel clickable. Clicking near a swept point
 %   opens that simulation's dashboard PNG in the system viewer.
 %
-%   ds_hm_motif_gui(summary_table)
-%   ds_hm_motif_gui(summary_table, root='../experiments/.../SR0-MR0')
+%   ds_plot_motif_gui(summary_table)
+%   ds_plot_motif_gui(summary_table, root='<repo>/logs/hebbian-sweep/SR0-MR0')
 %
 %   The table needs a 'root' column (added by DS_PROCESS_BABBLE) so that a
 %   POOLED table spanning several sweep trees can still find each run. Older
@@ -16,18 +16,18 @@ function ds_hm_motif_gui(tab, opt)
 %   PNG is missing the click prints the sim-ID and the path it looked for,
 %   rather than silently doing nothing.
 %
-%   See also DS_HM_MOTIF, DS_PROCESS_BABBLE.
+%   See also DS_PLOT_MOTIF_HEATMAPS, DS_PROCESS_BABBLE.
 
   arguments
     tab
     opt.root (1,:) char = ''      % fallback when the table has no 'root' column
-    opt.cmap = magma(1024)
+    opt.cmap = turbo(1024)
     opt.selzl (1,2) double = [0 0.30]
     opt.dotsize (1,1) double = 20   % config dots are size 5 by default,
                                     % too small to hit reliably
   end
 
-  ds_hm_motif(tab, cmap=opt.cmap, selzl=opt.selzl);
+  ds_plot_motif_heatmaps(tab, cmap=opt.cmap, selzl=opt.selzl);
   fig = gcf;
 
   % Heatmap panels are the axes containing a surf; the colourbars hold images,
@@ -35,7 +35,7 @@ function ds_hm_motif_gui(tab, opt)
   axs = findobj(fig, 'Type', 'axes');
   isHM = arrayfun(@(a) ~isempty(findobj(a,'Type','surface')), axs);
   hm = axs(isHM);
-  if isempty(hm), warning('ds_hm_motif_gui:noPanels','No heatmap axes found.'); return; end
+  if isempty(hm), warning('ds_plot_motif_gui:noPanels','No heatmap axes found.'); return; end
 
   % sort into row-major order: top row first, then left to right
   P = cell2mat(arrayfun(@(a) a.Position(1:2), hm, 'UniformOutput', false));
@@ -45,7 +45,7 @@ function ds_hm_motif_gui(tab, opt)
   gains = unique(tab.('heb_kwa_gai'));
   ncols = 4;
 
-  % Annotations live on the scribe layer ABOVE every axes, and ds_hm_motif's
+  % Annotations live on the scribe layer ABOVE every axes, and ds_plot_motif_heatmaps's
   % column titles are positioned to overlap ~96% of each top-row panel. Left
   % pickable they swallow every click before it reaches the data.
   set(findall(fig,'Type','textboxshape'), 'HitTest','off', 'PickableParts','none');
@@ -69,7 +69,7 @@ function ds_hm_motif_gui(tab, opt)
     end
   end
 
-  fprintf(['ds_hm_motif_gui: click a black config dot to open that run''s dashboard.\n' ...
+  fprintf(['ds_plot_motif_gui: click a black config dot to open that run''s dashboard.\n' ...
            '  %d panels, %d dots, gains %s\n'], numel(hm), nDots, mat2str(gains'));
 end
 
@@ -90,7 +90,7 @@ function on_click(src, evt, tab, gain, rootFallback)
   pb  = T.sup_kwa_bab_max_pro;
   str = T.opt_max_mus_str;
 
-  % nearest swept point. ds_hm_motif plots x = log10(p_b) on a linear axis and
+  % nearest swept point. ds_plot_motif_heatmaps plots x = log10(p_b) on a linear axis and
   % y = strength, so cp is already in (log10(p_b), strength); normalise both
   % axes or the wider range dominates the distance.
   x = log10(pb);

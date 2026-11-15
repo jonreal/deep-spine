@@ -1,7 +1,9 @@
-% PUBPLOTS_SI_6  SI figure: musculoskeletal plant.
+function figS5_plant(data_root, out_dir)
+%FIGS5_PLANT  SI figure: musculoskeletal plant.
 %
-% Script. Plots analysis/si_plant.mat, written from the MuJoCo model by
-%   python analysis/si_plant_export.py      (repo root, venv active)
+% Plots <out_dir>/si_plant.mat, written from the MuJoCo model by
+%   python analysis/pubfigs/export_plant.py      (repo root, venv active)
+% and writes <out_dir>/si-plant.pdf. data_root is unused (no simulation data).
 %
 % Layout (2 x 4 tiles):
 %   A  geometry at rest, arm hanging vertically: segments, joint wrapping
@@ -16,7 +18,13 @@
 % Moment arms are not shown: every muscle wraps a circular cylinder, so they
 % are a constant 7.5 cm by design.
 
-D = load('si_plant.mat');
+arguments
+  data_root (1,:) char = '' %#ok<INUSA>
+  out_dir (1,:) char = ''
+end
+[~, out_dir] = pubfigs_setup('', out_dir);
+
+D = load(fullfile(out_dir, 'si_plant.mat'));
 names = cellstr(string(D.names));  names = strtrim(names(:))';
 nm = numel(names);
 
@@ -38,7 +46,7 @@ for k = 1:nm
 end
 cSR = [0.2 0.2 0.2; 0.5 0.5 0.5; 0.8 0.8 0.8];
 
-figure('Position', [50 50 1400 640], 'Color', 'w');
+fig = figure('Position', [50 50 1400 640], 'Color', 'w');
 tl = tiledlayout(2, 4, 'TileSpacing', 'compact', 'Padding', 'compact');
 panelsize = fontsize + 6;                      % panel letters
 panel = @(a, lab) title(a, lab, 'Units', 'normalized', 'Position', [0.0 1.0], ...
@@ -143,6 +151,9 @@ grid(a, 'on');  box(a, 'on');  a.FontSize = fontsize;
 ylabel(a, 'Peak force at \lambda = 1 (N)');
 legend(a, SRlab, 'Location', 'northeast', 'Box', 'off', 'FontSize', fontsize-1);
 panel(a, 'F');
+
+save_pdf(fig, fullfile(out_dir, 'si-plant.pdf'));
+end
 
 % =========================================================================
 % Local helpers

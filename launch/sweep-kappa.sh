@@ -33,7 +33,7 @@ JOBS="${JOBS:--1}"
 # folder:kappa
 RUNS=(SR0-MR0-gain:1 SR0-MR0-gain:2 SR0-MR0-gain:3 SR0-MR0-gain:4 SR0-MR0-gain-10:10)
 
-# Same keys as the stored custom.txt files: analysis/extract_parameters.m builds
+# Same keys as the stored custom.txt files: analysis/ds_read_params.m builds
 # the sweep table from them.
 format_custom_json() {
     local log_dir="$1" str="$2" bab="$3" gain="$4"
@@ -82,6 +82,10 @@ echo
 
 export LOG_ROOT
 export -f format_custom_json
+
+# run jobs in bash: the exported functions do not exist in other shells, and
+# parallel falls back to $SHELL when it cannot detect the calling shell
+export PARALLEL_SHELL=bash
 
 parallel --will-cite --delay 10 --line-buffer --tag --jobs "$JOBS" --colsep : '
   JSON=$(format_custom_json "$LOG_ROOT/{1}" {3} {4} {2}) &&

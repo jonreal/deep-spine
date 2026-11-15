@@ -55,7 +55,7 @@ body_mass() {
   esac
 }
 
-# Same keys as the stored custom.txt files: analysis/extract_parameters.m builds
+# Same keys as the stored custom.txt files: analysis/ds_read_params.m builds
 # the sweep table from them.
 format_custom_json() {
     local log_dir="$1" str="$2" bab="$3" rms="$4" mass="$5"
@@ -104,6 +104,10 @@ echo
 
 export LOG_ROOT
 export -f format_custom_json rel_scale body_mass
+
+# run jobs in bash: the exported functions do not exist in other shells, and
+# parallel falls back to $SHELL when it cannot detect the calling shell
+export PARALLEL_SHELL=bash
 
 parallel --will-cite --delay 10 --line-buffer --tag --jobs "$JOBS" '
   JSON=$(format_custom_json "$LOG_ROOT/{1}" {2} {3} "$(rel_scale {1})" "$(body_mass {1})") &&

@@ -53,13 +53,13 @@ function summary_table = ds_process_babble(root,opt)
       end
 
       % Extract parameters
-      [keys, vals] = extract_parameters(path);
+      [keys, vals] = ds_read_params(path);
 
       % Extract data
       [episode, time, muscle_strength, Wi, We] = ...
-          extract_data([path,'/data.txt']);
+          ds_read_data([path,'/data.txt']);
       %save('We.mat','We');
-      motif = ds_Ia_motif(We);
+      motif = ds_fit_motif(We);
 
       % Outcome Measures
       signals = { ...

@@ -1,4 +1,4 @@
-function leaves = extract_leaves(s, prefix)
+function leaves = ds_flatten_struct(s, prefix)
     if nargin < 2
         prefix = "";
     end
@@ -13,14 +13,14 @@ function leaves = extract_leaves(s, prefix)
             if ~isempty(prefix)
                 new_prefix = new_prefix + "_";
             end
-            leaves = [leaves; extract_leaves(value, new_prefix)];
+            leaves = [leaves; ds_flatten_struct(value, new_prefix)];
         end
 
     elseif iscell(s)
         for i = 1:numel(s)
             value = s{i};
             new_prefix = prefix + string(i) + "_";
-            leaves = [leaves; extract_leaves(value, new_prefix)];
+            leaves = [leaves; ds_flatten_struct(value, new_prefix)];
         end
 
     else

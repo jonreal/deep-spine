@@ -1,29 +1,30 @@
-% PUBPLOTS_SI_7  SI figure: Ia afferent -> weight-change peak lag per connection.
+function [lagT, lagR] = figS6_ia_lag(data_root, out_dir, trial)
+%FIGS6_IA_LAG  SI figure: Ia afferent -> weight-change peak lag per connection.
 %
-% Script -- expects the high-rate trial in the workspace:
-%   [S,W,P] = ds_load_trial('../experiments/hebbian/logs/example-3/1790298957');
-%   dW = ds_load_dw_rule('../experiments/hebbian/logs/example-3/1790298957');
-%   pubplots_si_7
+%   figS6_ia_lag()                          canonical run from <repo>/logs
+%   figS6_ia_lag(data_root, out_dir, trial) trial from LOAD_CANONICAL (reused)
+% Writes <out_dir>/si-ia-lag.pdf.
 %
 % Lags come from gc_lag_estimation (unchanged method): for each connection
 % (MN i <- Ia j), the cross-correlation of the weight change dw_ij with the
 % presynaptic afferent x_Ia,j over the full run, searched on the predictive side
 % (afferent leads) up to maxLagSec; the lag of the peak |correlation| is shown.
 % Antagonist connections (not tested in Fig. 4) and pruned connections are
-% left blank. Results are left in the workspace as lagT / lagR.
+% left blank. Returns the gc_lag_estimation outputs lagT / lagR.
 
-if ~exist('S','var') || ~exist('W','var')
-  error('pubplots_si_7:noData', ...
-    'Load the trial first: [S,W,P] = ds_load_trial(root);');
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+  trial struct = struct()
 end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
+if isempty(fieldnames(trial)), trial = load_canonical(data_root); end
 
 fontsize = 12;
 labels   = {'SF','SE','EF','EE','BF','BE'};
 
-% dW (ds_load_dw_rule), if in the workspace, gives the rule-computed weight
-% change instead of differencing the float32 W
-if ~exist('dW','var'), dW = []; end
-[lagT, lagR] = gc_lag_estimation(S, W, dWrule=dW);
+% rule-computed weight change (dw_rule.bin), not the differenced float32 W
+[lagT, lagR] = gc_lag_estimation(trial.S, trial.W, dWrule=trial.dW);
 close(gcf);                                   % its own two-panel figure
 
 L = lagR.ia_peaklag;                          % s; NaN = pruned
@@ -35,7 +36,7 @@ C(mod(I + J, 2) == 1) = NaN;
 lagMax = ceil(max(L(:), [], 'omitnan')*20)/20;   % round up to 0.05 s
 cmap   = linspace(0.92, 0.05, 256)' * [1 1 1];   % light grey -> near black
 
-figure('Position', [100 100 430 380], 'Color', 'w');
+fig = figure('Position', [100 100 430 380], 'Color', 'w');
 ax = axes;
 him = imagesc(ax, L);
 set(him, 'AlphaData', ~isnan(L));             % blank (white) untested cells
@@ -61,3 +62,12 @@ fprintf('Ia -> dw peak lag (s), tested connections: min %.3f, max %.3f, mean %.3
 fprintf('peak |corr|: min %.3f, max %.3f\n', ...
         min(abs(C(:)),[],'omitnan'), max(abs(C(:)),[],'omitnan'));
 disp(L);
+homo = I == J & ~isnan(L);
+syn  = I ~= J & ~isnan(L);
+fprintf('homonymous: lag %.2f-%.2f s, |r| %.2f-%.2f\n', min(L(homo)), max(L(homo)), ...
+        min(abs(C(homo))), max(abs(C(homo))));
+fprintf('synergist : lag %.2f-%.2f s, |r| %.2f-%.2f\n', min(L(syn)), max(L(syn)), ...
+        min(abs(C(syn))), max(abs(C(syn))));
+
+save_pdf(fig, fullfile(out_dir, 'si-ia-lag.pdf'));
+end

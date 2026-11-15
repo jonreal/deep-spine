@@ -1,14 +1,20 @@
-% PUBPLOTS_SI_3  SI figures: Hebbian-gain (kappa) progression, SR0-MR0 body.
+function figS1S2_kappa(data_root, out_dir)
+%FIGS1S2_KAPPA  SI figures: Hebbian-gain (kappa) progression, SR0-MR0 body.
 %
-% Script. Loads the three SR0-MR0 sweep summary tables (kappa = 1-4, 5, 10),
+% Loads the three SR0-MR0 sweep summary tables (kappa = 1-4, 5, 10),
 % merges them, and draws
 %   figure 1 : mean reflex / synergy / antagonist vs p_b at lambda_max = lamSlice,
-%              one line per kappa                         (-> si-kappa-lines)
-%   figure 2 : ds_hm_motif heatmaps (R, S, A), one row per kappa (-> si-kappa-heatmaps)
-%
-% Figure handles are left in the workspace as figLines / figHeat for export.
+%              one line per kappa                         (-> si-kappa-lines.pdf)
+%   figure 2 : ds_plot_motif_heatmaps heatmaps (R, S, A), one row per kappa
+%                                                         (-> si-kappa-heatmaps.pdf)
 
-root = '../experiments/hebbian/logs/hebbian-sweep/';
+arguments
+  data_root (1,:) char = ''
+  out_dir (1,:) char = ''
+end
+[data_root, out_dir] = pubfigs_setup(data_root, out_dir);
+
+root = fullfile(data_root, 'hebbian-sweep');
 srcs = {'SR0-MR0-gain', 'SR0-MR0', 'SR0-MR0-gain-10'};
 lamSlice = 0.2;
 
@@ -63,7 +69,11 @@ lgd.Layout.Tile = 'east';
 title(tl, sprintf('SR_0, MR_0, \\lambda_{max} = %g', lamSlice), 'FontSize', fontsize);
 
 % ---------------------------------------------------
-% Figure 2: heatmaps per kappa (existing ds_hm_motif)
+% Figure 2: heatmaps per kappa (existing ds_plot_motif_heatmaps)
 % ---------------------------------------------------
-ds_hm_motif(Tk, selectivity=false, cmap=turbo(1024));   % turbo, as Fig 5
+ds_plot_motif_heatmaps(Tk, selectivity=false, cmap=turbo(1024));   % turbo, as Fig 5
 figHeat = gcf;
+
+save_pdf(figLines, fullfile(out_dir, 'si-kappa-lines.pdf'));
+save_pdf(figHeat,  fullfile(out_dir, 'si-kappa-heatmaps.pdf'), 250);
+end

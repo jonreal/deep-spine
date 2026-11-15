@@ -1,5 +1,5 @@
-function hull_area = plot_ic_surface(ax, q0, q1, rew, opt)
-% PLOT_IC_SURFACE Reward-weighted KDE surface + perfect-IC scatter + convex hull.
+function hull_area = ds_plot_ic_surface(ax, q0, q1, rew, opt)
+% DS_PLOT_IC_SURFACE Reward-weighted KDE surface + perfect-IC scatter + convex hull.
   arguments
     ax
     q0 (:,1) double

@@ -1,4 +1,4 @@
-function plot_heatmap(ax,x,y,z,opt)
+function ds_plot_heatmap(ax,x,y,z,opt)
   arguments
     ax
     x
@@ -18,7 +18,7 @@ function plot_heatmap(ax,x,y,z,opt)
     opt.YTickLabel = {}
     opt.TickDir = 'in'       % 'out' makes ticks visible outside the surf face
     opt.MarkerSize = 5;
-    opt.cmap = flipud(brewermap(1024, 'RdBu'));
+    opt.cmap = parula(1024);
   end
 
   %n = 1024;
@@ -43,7 +43,7 @@ function plot_heatmap(ax,x,y,z,opt)
   %     magnitude (~0.03 on a 0..1 range) but free to fix here.
   ylog = strcmpi(opt.scale, 'log');
   if ylog && min(y) <= 0
-    error('plot_heatmap:nonPositiveY', ...
+    error('ds_plot_heatmap:nonPositiveY', ...
       ['scale=''log'' needs y > 0, but min(y) = %g. Check the swept ' ...
        'parameter or pass scale=''linear''.'], min(y));
   end

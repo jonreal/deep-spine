@@ -80,7 +80,7 @@ function R = gc_event_triggered_stack(S, W, conns, opt)
     opt.verbose (1,1) logical = true
   end
 
-  [nMN, nIa] = gc_wsize(W);
+  [nMN, nIa] = ds_w_size(W);
   [lo_p, hi_p] = resolve_pct(opt.pct);
 
   % ---- which connections, and how they group into figures ----------------

@@ -6,7 +6,7 @@ function [S, W, P] = ds_load_trial(root, opt)
 %
 %     S - struct of per-step signals, time-major (N x width), see LAYOUT below
 %     W - Ia weights, FLAT storage: (m*m) x N, row (i-1)*m + j is W(i,j).
-%         Use GC_WTRACE(W,i,j) rather than indexing directly.
+%         Use DS_W_TRACE(W,i,j) rather than indexing directly.
 %     P - metadata: sampling rate, episode boundaries, the 1 Hz muscle-strength
 %         schedule, and the run's config/custom JSON.
 %
@@ -32,10 +32,10 @@ function [S, W, P] = ds_load_trial(root, opt)
 %     verbose    - print progress (default true).
 %
 %   Example:
-%     root = '../experiments/hebbian/logs/example-1/1787603818';
+%     root = '<repo>/logs/hebbian-canonical/1790298957';
 %     [S,W,P] = ds_load_trial(root, save=true);
 %
-%   See also GC_WTRACE, GC_WSIZE, EXTRACT_DATA.
+%   See also DS_W_TRACE, DS_W_SIZE, DS_READ_DATA.
 
   arguments
     root (1,:) char

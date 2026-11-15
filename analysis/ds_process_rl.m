@@ -1,4 +1,4 @@
-function results_table = process_rl(log_root, opt)
+function results_table = ds_process_rl(log_root, opt)
   arguments
     log_root (1,1) string
     opt.show = 'off'
@@ -60,7 +60,7 @@ function results_table = process_rl(log_root, opt)
     if fid ~= -1
       raw = fread(fid, inf, 'uint8=>char')'; fclose(fid);
       p = jsondecode(raw);
-      leaves = extract_leaves(p);
+      leaves = ds_flatten_struct(p);
       spine_type = parts{2};
       kv_parts = {sprintf('spine=%s', spine_type)};
       for t = 1:size(leaves, 1)
@@ -136,11 +136,11 @@ function results_table = process_rl(log_root, opt)
   model_max_mean_rew = zeros(n_models, 1);
 
   for i = 1:n_models
-    [~, rew] = get_model_tag(T, all_models{i}, sprintf('eps/%s', opt.rew_var));
+    [~, rew] = ds_read_tb_tag(T, all_models{i}, sprintf('eps/%s', opt.rew_var));
     if isempty(rew)
-      [~, rew] = get_model_tag(T, all_models{i}, 'eps/ep_rew');
+      [~, rew] = ds_read_tb_tag(T, all_models{i}, 'eps/ep_rew');
     end
-    [~, solved] = get_model_tag(T, all_models{i}, 'eps/solved');
+    [~, solved] = ds_read_tb_tag(T, all_models{i}, 'eps/solved');
     model_n_perfect(i) = max(solved);
     model_mean_rew(i) = mean(rew);
     model_max_mean_rew(i) = max(movmean(rew, opt.mean_win));
@@ -194,25 +194,25 @@ function results_table = process_rl(log_root, opt)
   for k = 1:n_sel
     i = sel_indices(k);
     [traces(k).step, traces(k).solved] = ...
-      get_model_tag(T, all_models{i}, 'eps/solved');
+      ds_read_tb_tag(T, all_models{i}, 'eps/solved');
     traces(k).perfect = logical([0; diff(double(traces(k).solved)) > 0]);
-    [~, traces(k).eps] = get_model_tag(T, all_models{i}, 'eps/eps');
+    [~, traces(k).eps] = ds_read_tb_tag(T, all_models{i}, 'eps/eps');
     [traces(k).rew_step, traces(k).rew] = ...
-      get_model_tag(T, all_models{i}, sprintf('eps/%s', opt.rew_var));
+      ds_read_tb_tag(T, all_models{i}, sprintf('eps/%s', opt.rew_var));
     if isempty(traces(k).rew)
       [traces(k).rew_step, traces(k).rew] = ...
-        get_model_tag(T, all_models{i}, 'eps/ep_rew');
+        ds_read_tb_tag(T, all_models{i}, 'eps/ep_rew');
     end
     traces(k).roll_mean = movmean(traces(k).rew, opt.mean_win);
-    [~, traces(k).ic_q0]   = get_model_tag(T, all_models{i}, 'eps/ic_q0');
-    [~, traces(k).ic_q1]   = get_model_tag(T, all_models{i}, 'eps/ic_q1');
-    [~, traces(k).ic_pend] = get_model_tag(T, all_models{i}, 'eps/ic_pend');
-    [~, traces(k).fc_q0] = get_model_tag(T, all_models{i}, 'eps/fc_q0');
-    [~, traces(k).fc_q1] = get_model_tag(T, all_models{i}, 'eps/fc_q1');
+    [~, traces(k).ic_q0]   = ds_read_tb_tag(T, all_models{i}, 'eps/ic_q0');
+    [~, traces(k).ic_q1]   = ds_read_tb_tag(T, all_models{i}, 'eps/ic_q1');
+    [~, traces(k).ic_pend] = ds_read_tb_tag(T, all_models{i}, 'eps/ic_pend');
+    [~, traces(k).fc_q0] = ds_read_tb_tag(T, all_models{i}, 'eps/fc_q0');
+    [~, traces(k).fc_q1] = ds_read_tb_tag(T, all_models{i}, 'eps/fc_q1');
     [traces(k).eval_step, traces(k).eval_n_perfect] = ...
-      get_model_tag(T, all_models{i}, 'eval/n_perfect');
+      ds_read_tb_tag(T, all_models{i}, 'eval/n_perfect');
     [~, traces(k).eval_mean_rew] = ...
-      get_model_tag(T, all_models{i}, 'eval/mean_rew');
+      ds_read_tb_tag(T, all_models{i}, 'eval/mean_rew');
     traces(k).model_idx = i;
     % Load decimation_factor from config.json (full resolved config)
     parts_k = split(all_models{i}, '-');
@@ -466,7 +466,7 @@ function results_table = process_rl(log_root, opt)
     if fid ~= -1
       raw = fread(fid, inf, 'uint8=>char')'; fclose(fid);
       p = jsondecode(raw);
-      leaves = extract_leaves(p);
+      leaves = ds_flatten_struct(p);
       skip = {'log_dir', 'options_seed'};
       for t = 1:size(leaves, 1)
         key = leaves{t, 1};
@@ -566,7 +566,7 @@ function results_table = process_rl(log_root, opt)
   for g = 1:n_groups
     box_groups{g} = metrics(g).solved_max(:);
   end
-  plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
+  ds_plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
     'markersize', markersize_boxplot, 'labels', box_labels);
   ylabel(ax_box, 'Perfect Episodes');
   ylim(ax_box, yl);
@@ -606,7 +606,7 @@ function results_table = process_rl(log_root, opt)
   for g = 1:n_groups
     box_groups{g} = metrics(g).reward_max(:);
   end
-  plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
+  ds_plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
     'markersize', markersize_boxplot, 'labels', box_labels);
   ylabel(ax_box, 'Max Mean Reward');
   ylim(ax_box, yl);
@@ -622,7 +622,7 @@ function results_table = process_rl(log_root, opt)
   for g = 1:n_groups
     box_groups{g} = metrics(g).eps_to_perfect(:);
   end
-  plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
+  ds_plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
     'markersize', markersize_boxplot, 'labels', box_labels);
   ylabel(ax_box, 'Episodes to Perfect');
   ylim(ax_box, [0 inf]);
@@ -637,7 +637,7 @@ function results_table = process_rl(log_root, opt)
   %for g = 1:n_groups
   %  box_groups{g} = metrics(g).supra_steps_to_perfect(:);
   %end
-  %plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
+  %ds_plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
   %  'markersize', markersize_boxplot, 'labels', box_labels);
   %ylabel(ax_box, 'Supra Steps to Perfect');
   %ylim(ax_box, [0 inf]);
@@ -652,7 +652,7 @@ function results_table = process_rl(log_root, opt)
   %for g = 1:n_groups
   %  box_groups{g} = metrics(g).sim_steps_to_perfect(:);
   %end
-  %plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
+  %ds_plot_boxjitter(ax_box, box_groups, 'colors', cmap, ...
   %  'markersize', markersize_boxplot, 'labels', box_labels);
   %ylabel(ax_box, 'Sim Steps to Perfect');
   %ylim(ax_box, [0 inf]);
@@ -791,9 +791,9 @@ function results_table = process_rl(log_root, opt)
 
     if strcmp(opt.ic_type, 'pend_only')
       g_pend = all_pend(g_idx);
-      plot_pend_ics(ax, g_pend, g_rew_norm, 'perfect_mask', g_perfect);
+      ds_plot_pend_ics(ax, g_pend, g_rew_norm, 'perfect_mask', g_perfect);
     else
-      plot_ic_surface(ax, g_q0, g_q1, g_rew, ...
+      ds_plot_ic_surface(ax, g_q0, g_q1, g_rew, ...
         'perfect_mask', g_perfect, ...
         'rew_max', max(g_rew), ...
         'do_kernel', opt.do_kernel, ...
@@ -856,10 +856,10 @@ function results_table = process_rl(log_root, opt)
 
     if strcmp(opt.ic_type, 'pend_only')
       g_pend = all_pend(g_idx);
-      plot_pend_ics(ax, g_pend(is_perfect), ones(sum(is_perfect),1), ...
+      ds_plot_pend_ics(ax, g_pend(is_perfect), ones(sum(is_perfect),1), ...
         'perfect_mask', true(sum(is_perfect),1), 'alpha', 0.8);
     else
-      plot_arm_configs(ax, g_q0(is_perfect), g_q1(is_perfect), ...
+      ds_plot_arm_configs(ax, g_q0(is_perfect), g_q1(is_perfect), ...
         g_rew_norm(is_perfect), 'L', L);
     end
 
@@ -898,7 +898,7 @@ function results_table = process_rl(log_root, opt)
     pos = [xs, ys, g_w, g_h];
     ax = axes('Position', pos);
 
-    plot_arm_configs(ax, band_ic(g).q0, band_ic(g).q1, band_ic(g).rew, ...
+    ds_plot_arm_configs(ax, band_ic(g).q0, band_ic(g).q1, band_ic(g).rew, ...
       'L', L, 'alpha', 0.1);
 
     pos_ann = [pos(1) + 0.65*g_w, pos(2) + 0.85*g_h, 0.35*g_w, 0.15*g_h];
@@ -934,7 +934,7 @@ function results_table = process_rl(log_root, opt)
     pos = [xs, ys, g_w, g_h];
     ax = axes('Position', pos);
 
-    plot_arm_configs(ax, band_fc(g).q0, band_fc(g).q1, band_fc(g).rew, ...
+    ds_plot_arm_configs(ax, band_fc(g).q0, band_fc(g).q1, band_fc(g).rew, ...
       'L', L, 'alpha', 0.1);
 
     pos_ann = [pos(1) + 0.65*g_w, pos(2) + 0.85*g_h, 0.35*g_w, 0.15*g_h];
@@ -1036,7 +1036,7 @@ function results_table = process_rl(log_root, opt)
   for g = 1:n_groups
     box_groups{g} = metrics(g).eval_n_perfect_max(:);
   end
-  plot_boxjitter(ax_box_np, box_groups, 'colors', cmap, ...
+  ds_plot_boxjitter(ax_box_np, box_groups, 'colors', cmap, ...
     'markersize', markersize_boxplot, 'labels', box_labels);
   ylabel(ax_box_np, 'Max Eval Perfect');
   ylim(ax_box_np, yl_np);
@@ -1045,7 +1045,7 @@ function results_table = process_rl(log_root, opt)
   for g = 1:n_groups
     box_groups{g} = metrics(g).eval_mean_rew_max(:);
   end
-  plot_boxjitter(ax_box_mrew, box_groups, 'colors', cmap, ...
+  ds_plot_boxjitter(ax_box_mrew, box_groups, 'colors', cmap, ...
     'markersize', markersize_boxplot, 'labels', box_labels);
   ylabel(ax_box_mrew, 'Max Eval Mean Rew');
   ylim(ax_box_mrew, yl_mrew);
