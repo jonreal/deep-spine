@@ -5,6 +5,7 @@ message: "If you use deep-spine, please cite the paper below."
 type: software
 title: "deep-spine: neuromechanical simulation of spinal circuits and their self-organization"
 version: 0.1.0
+license: BSD-3-Clause
 repository-code: "https://github.com/jonreal/deep-spine"
 authors:
   - family-names: Realmuto

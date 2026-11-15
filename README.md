@@ -130,7 +130,7 @@ logs/            simulation output (not tracked)
 
 ## License
 
-Pending (UC Riverside Office of Technology Partnerships).
+BSD 3-Clause; see [LICENSE](LICENSE).
 
 ## Citation
 

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,8 +7,9 @@ name = "deep_spine"
 version = "0.1.0"
 description = "Neuromechanical simulation of spinal circuits and their self-organization"
 readme = "README.md"
-# license: noncommercial; pending UCR Office of Technology Partnerships (see LICENSE)
-authors = [{ name = "Jonathan Realmuto", email = "jrealmut@ucr.edu" }]
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+authors = [{ name = "Jonathan Realmuto", email = "jdrealmuto@gmail.com" }]
 requires-python = "==3.13.*"
 # Exact versions that produced the published results (simulations are
 # byte-identical only with these; numpy 2.2.6 and mujoco 3.3.5 have no wheels
