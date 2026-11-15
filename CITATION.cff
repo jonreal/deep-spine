@@ -1,0 +1,28 @@
+# Fill in once the arXiv preprint is posted: replace every XXXX.XXXXX
+# (also in README.md and REPRODUCING.md). Add the journal reference when published.
+cff-version: 1.2.0
+message: "If you use deep-spine, please cite the paper below."
+type: software
+title: "deep-spine: neuromechanical simulation of spinal circuits and their self-organization"
+version: 0.1.0
+repository-code: "https://github.com/jonreal/deep-spine"
+authors:
+  - family-names: Realmuto
+    given-names: Jonathan
+    affiliation: "University of California, Riverside"
+preferred-citation:
+  type: article
+  title: "Hebbian self-organization of monosynaptic reflexes in a biologically realistic multiarticular limb"
+  authors:
+    - family-names: Realmuto
+      given-names: Jonathan
+      affiliation: "University of California, Riverside"
+    - family-names: Nozari
+      given-names: Erfan
+      affiliation: "University of California, Riverside"
+    - family-names: Loeb
+      given-names: Gerald E.
+      affiliation: "University of Southern California"
+  year: 2026
+  journal: "arXiv"
+  url: "https://arxiv.org/abs/XXXX.XXXXX"

@@ -7,11 +7,14 @@ with optional Hebbian plasticity on the spinal connections. It can be used to
 study how reflex circuits self-organize during motor babble, or to train a
 controller on top of a (learned or fixed) spine with reinforcement learning.
 
-- **Plant:** any MuJoCo model with muscle actuators. The spine sizes itself
-  from the model's muscles and reads their lengths, velocities and forces in
-  MuJoCo's own normalization. Included: `arm26`, a planar two-joint arm with six
-  muscles (shoulder, elbow and biarticular flexor/extensor pairs), and a
-  variant carrying an inverted pendulum.
+> **To reproduce the results of the accompanying paper, see
+> [REPRODUCING.md](REPRODUCING.md).**
+
+- **Plant:** designed for MuJoCo models with muscle actuators: the spine sizes
+  itself from the model's muscles and reads their lengths, velocities and forces
+  in MuJoCo's own normalization. Tested with the included `arm26`, a planar
+  two-joint arm with six muscles (shoulder, elbow and biarticular
+  flexor/extensor pairs), and a variant carrying an inverted pendulum.
 - **Spine:** `ia_reflex` (Ia afferents → motoneurons), `ia_interneurons`
   (adds excitatory and inhibitory interneuron populations), `identity` (no
   spinal processing).
@@ -98,11 +101,12 @@ Strings such as `"spine.net.W_Ia"` resolve to objects in the running
 simulation, so learners and visualizations can target any part of the network.
 
 Included configs: `babble.json` (Hebbian babble in the six-muscle arm) and
-`mutant-babble.json` (same, with altered relative muscle strengths).
+`babble-mutant.json` (same, with altered relative muscle strengths).
 
-To use another model, set `env_kwargs.xml_path` to its MJCF file. Spinal gains
-are tuned for `arm26`'s muscle operating range and may need retuning for other
-models.
+To try another model, set `env_kwargs.xml_path` to its MJCF file. Expect some
+work: spinal gains are tuned for `arm26`'s muscle operating range, the
+environments contain `arm26`-specific settings (e.g. body-mass overrides), and
+the analysis and visualization tools assume six muscles by default.
 
 ## Analysis
 
@@ -127,3 +131,11 @@ logs/            simulation output (not tracked)
 ## License
 
 Pending (UC Riverside Office of Technology Partnerships).
+
+## Citation
+
+If you use deep-spine, please cite (see also [CITATION.cff](CITATION.cff)):
+
+> J. Realmuto, E. Nozari, G. E. Loeb. Hebbian self-organization of monosynaptic
+> reflexes in a biologically realistic multiarticular limb.
+> [arXiv:XXXX.XXXXX](https://arxiv.org/abs/XXXX.XXXXX) (2026).

@@ -4,6 +4,7 @@ Simulations, analysis and figures for:
 
 > J. Realmuto, E. Nozari, G. E. Loeb. Hebbian self-organization of monosynaptic
 > reflexes in a biologically realistic multiarticular limb.
+> [arXiv:XXXX.XXXXX](https://arxiv.org/abs/XXXX.XXXXX) (2026).
 
 Install as in the [README](README.md); the pinned versions are the ones that
 produced the published results, and the simulations are seeded and
