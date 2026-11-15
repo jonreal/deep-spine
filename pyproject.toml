@@ -9,9 +9,10 @@ description = "Neuromechanical simulation of spinal circuits and their self-orga
 readme = "README.md"
 # license: noncommercial; pending UCR Office of Technology Partnerships (see LICENSE)
 authors = [{ name = "Jonathan Realmuto", email = "jrealmut@ucr.edu" }]
-requires-python = ">=3.13"
+requires-python = "==3.13.*"
 # Exact versions that produced the published results (simulations are
-# byte-identical only with these). Ranges may replace them in a later release.
+# byte-identical only with these; numpy 2.2.6 and mujoco 3.3.5 have no wheels
+# for Python 3.14). Ranges may replace them in a later release.
 dependencies = [
     "mujoco==3.3.5",
     "numpy==2.2.6",
