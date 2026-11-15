@@ -1,0 +1,7 @@
+**/.claude/settings.local.json
+.DS_STORE
+__pycache__
+*.mat
+*.fig
+*.pdf
+*.png

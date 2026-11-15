@@ -1,3 +1,12 @@
+"""Command-line entry point for deep-spine simulations.
+
+Usage:
+    deep-spine --config configs/babble.json [--custom JSON] [--log] [--show]
+    python -m deep_spine --config ...
+
+Each run writes to ``<log_dir>/<sim_id>/`` (``log_dir`` from the config,
+default ``<repo>/logs/untitled``).
+"""
 import argparse
 import json
 import os, sys
@@ -63,6 +72,8 @@ VIZ_FIGS = {
 VIZ_GEOMS = {
     "heatmap_geom": make_heatmap_geom,
 }
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def build_strength_schedule(s0, s_max, n_eps, shape, ramp_fraction=0.8):
@@ -168,7 +179,7 @@ def main():
 
     # --- Unpack config ---
     options = config.get("options", {})
-    root_log_dir = config.get("log_dir", "./logs/untitled")
+    root_log_dir = config.get("log_dir", str(REPO_ROOT / "logs" / "untitled"))
     now = time.time()
     local_time = time.localtime(now)
     sim_id = int(now)
@@ -195,6 +206,12 @@ def main():
     hebbian_kwargs = config.get("hebbian_kwargs", {})
     viz_config = config.get("viz", [])
 
+    # Log files always live in this run's log_dir. A path_to_log carried in from
+    # a stored config (e.g. a replayed config.json) is dropped, so a replay can
+    # never append to the original run's env.txt / hebbian.txt.
+    env_kwargs.pop("path_to_log", None)
+    for kwargs in hebbian_kwargs:
+        kwargs.pop("path_to_log", None)
     if args.log:
         env_log = os.path.join(log_dir, "env.txt")
         env_kwargs["path_to_log"] = env_log
@@ -203,7 +220,7 @@ def main():
             hebbian_kwargs[0]["path_to_log"] = hebbian_log
 
     date_string = f'{time.strftime("%b-%-d-%Y", local_time)}\n{sim_id}'
-    sim_animation = f'./{log_dir}/sim'
+    sim_animation = os.path.join(log_dir, 'sim')
     torch.manual_seed(options.get("seed", 1))
 
     print('-----------');
@@ -361,7 +378,7 @@ def main():
 
             if args.eval is None:
                 # Training mode
-                mdir = f'./{log_dir}/model'
+                mdir = os.path.join(log_dir, 'model')
                 os.makedirs(mdir, exist_ok=True)
                 check_points = options.get("check_points",1)
                 total_sim_steps = options.get("total_sim_steps", 1000)
@@ -474,7 +491,7 @@ def main():
             steps_per_eps = env.episode_length / env.model.opt.timestep
             last_write_time = 0.0
             tinit = time.time()
-            data_file = open(f'./{log_dir}/data.txt', 'wb')
+            data_file = open(os.path.join(log_dir, 'data.txt'), 'wb')
 
             for i in range(options.get("num_eps", 50)):
                 tstart = time.time()
