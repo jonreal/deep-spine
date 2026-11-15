@@ -35,9 +35,9 @@ ds_process_babble(root)
 `ds_find_run(root, gain=5, strength=0.2, babble=0.0046)` returns the run
 directory for a parameter set.
 
-## Canonical run: per-step signals and Granger analysis
+## Per-step signals and Granger analysis
 
-Needs a run with `--log` and its rule-computed weight update:
+Needs a run made with `--log`, plus its rule-computed weight update (example: the canonical run):
 
 ```bash
 python analysis/export_dw_rule.py logs/hebbian-canonical/<sim-id>   # writes dw_rule.bin
@@ -81,29 +81,6 @@ of a pendulum run.
 
 ## Paper figures (`pubfigs/`)
 
-Each function reads `<repo>/logs` and writes to `pubfigs/out/` by default
-(`figN(data_root, out_dir)`). Sweep figures read the summary tables, so run
-`ds_process_babble` on each sweep folder first. To make everything, loading the
-canonical run once:
-
-```matlab
-addpath('<repo>/analysis/pubfigs')
-make_all
-```
-
-| Figure | Function | Data | Output |
-|---|---|---|---|
-| Fig 1 | — (drawn by hand) | | |
-| Fig 2 | `fig2_motif` | `hebbian-sweep/SR0-MR0{,-gain}` | `motif-regression.pdf` |
-| Fig 3 | `fig3_grid` | canonical run | `grid.pdf` |
-| Fig 4 | `fig4_granger` | canonical run + `dw_rule.bin` | `granger.pdf` |
-| Fig 5 | `fig5_sweep` | `hebbian-sweep/SR*-MR0` | `sweep.pdf` |
-| Figs S1, S2 | `figS1S2_kappa` | `hebbian-sweep/SR0-MR0{,-gain,-gain-10}` | `si-kappa-lines.pdf`, `si-kappa-heatmaps.pdf` |
-| Fig S3 | `figS3_timehistory` | canonical run | `si-timehistory.pdf` |
-| Fig S4 | `figS4_sweep_mr1` | `hebbian-sweep/SR*-MR1` | `si-sweep-mr1.pdf` |
-| Fig S5 | `figS5_plant` | `out/si_plant.mat` from `python analysis/pubfigs/export_plant.py` | `si-plant.pdf` |
-| Fig S6 | `figS6_ia_lag` | canonical run + `dw_rule.bin` | `si-ia-lag.pdf` |
-| Table S1 | `tableS1_motif` | `hebbian-sweep/SR*-MR*` | `si-motif-table.tex` |
-| Movies S1–S4 | `cut_movies.py` | canonical `sim.mp4` | `si-movie-{start,early,late,end}.mp4` |
-
-`fig4_granger` and `figS6_ia_lag` print the statistics reported in the text.
+One function per figure (`figN(data_root, out_dir)`, defaults `<repo>/logs` and
+`pubfigs/out/`); `make_all` makes them all. Steps and the figure table:
+[REPRODUCING.md](../REPRODUCING.md).

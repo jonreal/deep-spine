@@ -89,5 +89,5 @@ export PARALLEL_SHELL=bash
 
 parallel --will-cite --delay 10 --line-buffer --tag --jobs "$JOBS" --colsep : '
   JSON=$(format_custom_json "$LOG_ROOT/{1}" {3} {4} {2}) &&
-  python -m deep_spine --config configs/canonical.json --custom "$JSON"
+  python -m deep_spine --config configs/babble.json --custom "$JSON"
 ' ::: "${RUNS[@]}" ::: "${STRENGTH[@]}" ::: "${BABBLE[@]}"

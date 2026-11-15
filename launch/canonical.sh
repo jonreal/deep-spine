@@ -2,7 +2,7 @@
 # Canonical run (SR0-MR0, kappa 5, strength 0.2, babble 0.0046, seed 1) with
 # per-step logs and video, then the per-step Hebbian update and the SI clips.
 #
-# The frame rate is set in a copy of configs/canonical.json, not with --custom
+# The frame rate is set in a copy of configs/babble.json, not with --custom
 # or --show: those print the overrides onto the video.
 #
 # Usage (repo root, environment active):
@@ -34,7 +34,7 @@ CONFIG=$(mktemp "${TMPDIR:-/tmp}/canonical-video.XXXXXX")
 trap 'rm -f "$CONFIG"' EXIT
 python - "$CONFIG" "$LOG_ROOT" <<'EOF'
 import json, sys
-c = json.load(open('configs/canonical.json'))
+c = json.load(open('configs/babble.json'))
 c['log_dir'] = sys.argv[2]
 c['env_kwargs']['frame_rate'] = 20
 json.dump(c, open(sys.argv[1], 'w'), indent=2)

@@ -1,5 +1,5 @@
 {
-  "log_dir": "./logs/hebbian-canonical",
+  "log_dir": "./logs/babble",
   "options": {
     "num_eps": 2000,
     "seed": 1,

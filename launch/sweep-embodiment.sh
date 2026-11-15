@@ -4,7 +4,7 @@
 #   SR = strength ratio, relative_muscle_scale over [SF SE EF EE BF BE]
 #   MR = mass ratio, body_mass over [ground, upper arm, forearm, hand]
 #
-# Each run is configs/canonical.json with the overrides below; the canonical
+# Each run is configs/babble.json with the overrides below; the canonical
 # run is the SR0-MR0 point at strength 0.2, babble 0.0046.
 #
 # Usage (repo root, environment active):
@@ -111,5 +111,5 @@ export PARALLEL_SHELL=bash
 
 parallel --will-cite --delay 10 --line-buffer --tag --jobs "$JOBS" '
   JSON=$(format_custom_json "$LOG_ROOT/{1}" {2} {3} "$(rel_scale {1})" "$(body_mass {1})") &&
-  python -m deep_spine --config configs/canonical.json --custom "$JSON"
+  python -m deep_spine --config configs/babble.json --custom "$JSON"
 ' ::: "${TAGS[@]}" ::: "${STRENGTH[@]}" ::: "${BABBLE[@]}"
