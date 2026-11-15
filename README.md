@@ -130,7 +130,8 @@ logs/            simulation output (not tracked)
 
 ## License
 
-BSD 3-Clause; see [LICENSE](LICENSE).
+BSD 3-Clause; see [LICENSE](LICENSE). The arm26 MuJoCo model files are derived from
+DeepMind's MuJoCo arm26 model (Apache 2.0, [LICENSE-APACHE](LICENSE-APACHE)).
 
 ## Citation
 

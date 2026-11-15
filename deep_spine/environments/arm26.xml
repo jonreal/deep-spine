@@ -12,6 +12,8 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
+<!-- Modified by Jonathan Realmuto, 2024-2026, for deep-spine: fixed muscle peak
+     force (force="240") and operating range, muscle origin sites, body masses. -->
 
 <mujoco model="2-link 6-muscle arm">
 

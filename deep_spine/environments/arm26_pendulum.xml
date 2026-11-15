@@ -12,6 +12,8 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
+<!-- Modified by Jonathan Realmuto, 2026, for deep-spine: changes as in arm26.xml,
+     plus gravity, joint damping, and an inverted pendulum on the hand. -->
 
 <mujoco model="2-link 6-muscle arm">
 

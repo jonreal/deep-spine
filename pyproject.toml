@@ -7,8 +7,8 @@ name = "deep_spine"
 version = "0.1.0"
 description = "Neuromechanical simulation of spinal circuits and their self-organization"
 readme = "README.md"
-license = "BSD-3-Clause"
-license-files = ["LICENSE"]
+license = "BSD-3-Clause AND Apache-2.0"
+license-files = ["LICENSE", "LICENSE-APACHE"]
 authors = [{ name = "Jonathan Realmuto", email = "jdrealmuto@gmail.com" }]
 requires-python = "==3.13.*"
 # Exact versions that produced the published results (simulations are

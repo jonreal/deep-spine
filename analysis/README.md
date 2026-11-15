@@ -79,6 +79,11 @@ ds_process_rl('<sweep-root>');
 `pip install -e ".[analysis]"`). `ds_read_pend_data` reads the 200 Hz `env.txt`
 of a pendulum run.
 
+## Other
+
+`FLV(lmin, lmax, vmax, fpmax, fvmax)` plots MuJoCo's muscle force-length-velocity
+surface (DeepMind, Apache 2.0; see the file header).
+
 ## Paper figures (`pubfigs/`)
 
 One function per figure (`figN(data_root, out_dir)`, defaults `<repo>/logs` and
