@@ -13,7 +13,8 @@
 #   data.txt, env.txt, hebbian.txt     simulation and per-step logs (~21 GB)
 #   dw_rule.bin                        per-step Hebbian update, Figs 3-4 (~5 GB)
 #   sim.mp4                            full run at 10x real time (~20 GB)
-#   si-clips/si-movie-*.mp4            Movies S1-S4
+#   si-clips/si-movie-full.mp4         Movie S1 (2000x time-lapse of the whole run)
+#   si-clips/si-movie-{start,early,late,end}.mp4   Movies S2-S5 (20 s, real time)
 #
 # 2000 episodes = 50 h simulated; about 18 h wall clock with video. Stop it
 # with Ctrl-C in this terminal (not under parallel) so the video is finalized.
@@ -47,3 +48,4 @@ echo "run: $RUN"
 
 python analysis/export_dw_rule.py "$RUN"
 python analysis/pubfigs/cut_movies.py "$RUN/sim.mp4" "$RUN/si-clips"
+python analysis/pubfigs/timelapse_movie.py "$RUN/sim.mp4" "$RUN/si-clips/si-movie-full.mp4"

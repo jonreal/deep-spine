@@ -8,8 +8,12 @@ study how reflex circuits self-organize during motor babble, or to train a
 controller on top of a (learned or fixed) spine with reinforcement learning.
 
 <p align="center">
-<img width="600" height="450" alt="timelapse" src="https://github.com/user-attachments/assets/8674b7e1-f6c4-4610-812f-963cc2cd5e7b" />
+<img width="600" height="450" alt="50 h of simulated motor babble in 15 s: the Ia→MN weight matrix self-organizes into reflexes and synergies" src="https://github.com/user-attachments/assets/8674b7e1-f6c4-4610-812f-963cc2cd5e7b" />
 </p>
+<p align="center"><em>50 h of simulated development in 15 s. Motor babble drives the
+arm while muscle strength ramps up (bottom); the Ia→MN weight matrix (top left,
+white = 0, red = 1) self-organizes from small random weights into homonymous
+reflexes and synergist connections.</em></p>
 
 > **To reproduce the results of the accompanying paper, see
 > [REPRODUCING.md](REPRODUCING.md).**

@@ -16,7 +16,7 @@ deterministic. Run everything from the repository root.
 |---|---|---|---|---|
 | `launch/sweep-embodiment.sh` | 600: 6 bodies × 10 strengths × 10 babble levels, κ = 5 | `logs/hebbian-sweep/SR{0,1,2}-MR{0,1}/` | ~3 days | ~32 GB |
 | `launch/sweep-kappa.sh` | 500: SR0-MR0, κ = 1–4 and 10 | `logs/hebbian-sweep/SR0-MR0-gain{,-10}/` | ~2.5 days | ~27 GB |
-| `launch/canonical.sh` | 1: the canonical run with per-step logs and video, then `dw_rule.bin` and Movies S1–S4 | `logs/hebbian-canonical/` | ~18 h | ~46 GB |
+| `launch/canonical.sh` | 1: the canonical run with per-step logs and video, then `dw_rule.bin` and Movies S1–S5 | `logs/hebbian-canonical/` | ~18 h | ~46 GB |
 
 Every run is `configs/babble.json` with the sweep's overrides: 2000 episodes of
 90 s (50 h simulated), about 2.6 h each. The canonical run is the SR0-MR0 sweep
@@ -63,7 +63,8 @@ Each figure can also be made on its own, e.g. `fig4_granger()`.
 | Fig S5 | `figS5_plant` | `si_plant.mat` from `export_plant.py` | `si-plant.pdf` |
 | Fig S6 | `figS6_ia_lag` | canonical run + `dw_rule.bin` | `si-ia-lag.pdf` |
 | Table S1 | `tableS1_motif` | `hebbian-sweep/SR*-MR*` | `si-motif-table.tex` |
-| Movies S1–S4 | `cut_movies.py` (run by `canonical.sh`) | canonical `sim.mp4` | `si-movie-{start,early,late,end}.mp4` |
+| Movie S1 | `timelapse_movie.py` (run by `canonical.sh`) | canonical `sim.mp4` | `si-movie-full.mp4` (2000× time-lapse) |
+| Movies S2–S5 | `cut_movies.py` (run by `canonical.sh`) | canonical `sim.mp4` | `si-movie-{start,early,late,end}.mp4` |
 
 `fig4_granger` and `figS6_ia_lag` print the statistics reported in the text.
-Cutting the movies needs `ffmpeg`.
+The movie scripts need `ffmpeg`.

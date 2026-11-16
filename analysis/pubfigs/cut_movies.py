@@ -1,4 +1,5 @@
-"""Cut real-time SI clips out of the canonical run's sim.mp4.
+"""Cut the real-time SI clips (Movies S2-S5) out of the canonical run's sim.mp4.
+Movie S1, the time-lapse of the whole run, is made by timelapse_movie.py.
 
 Usage (repo root, venv active):
     python analysis/pubfigs/cut_movies.py <path/to/sim.mp4> [outdir] [names]
