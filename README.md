@@ -7,7 +7,9 @@ with optional Hebbian plasticity on the spinal connections. It can be used to
 study how reflex circuits self-organize during motor babble, or to train a
 controller on top of a (learned or fixed) spine with reinforcement learning.
 
+<p align="center">
 <img width="600" height="450" alt="timelapse" src="https://github.com/user-attachments/assets/8674b7e1-f6c4-4610-812f-963cc2cd5e7b" />
+</p>
 
 > **To reproduce the results of the accompanying paper, see
 > [REPRODUCING.md](REPRODUCING.md).**
