@@ -147,4 +147,4 @@ If you use deep-spine, please cite (see also [CITATION.cff](CITATION.cff)):
 
 > J. Realmuto, E. Nozari, G. E. Loeb. Hebbian self-organization of monosynaptic
 > reflexes in a biologically realistic multiarticular limb.
-> [arXiv:XXXX.XXXXX](https://arxiv.org/abs/XXXX.XXXXX) (2026).
+> [arXiv:2611.23441](https://arxiv.org/abs/2611.23441) (2026).

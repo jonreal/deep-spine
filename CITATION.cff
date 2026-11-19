@@ -1,5 +1,4 @@
-# Fill in once the arXiv preprint is posted: replace every XXXX.XXXXX
-# (also in README.md and REPRODUCING.md). Add the journal reference when published.
+# Update preferred-citation with the journal reference when published.
 cff-version: 1.2.0
 message: "If you use deep-spine, please cite the paper below."
 type: software
@@ -28,4 +27,5 @@ preferred-citation:
       affiliation: "University of Southern California"
   year: 2026
   journal: "arXiv"
-  url: "https://arxiv.org/abs/XXXX.XXXXX"
+  doi: "10.48550/arXiv.2611.23441"
+  url: "https://arxiv.org/abs/2611.23441"
