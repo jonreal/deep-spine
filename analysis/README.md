@@ -84,8 +84,9 @@ of a pendulum run.
 `FLV(lmin, lmax, vmax, fpmax, fvmax)` plots MuJoCo's muscle force-length-velocity
 surface (DeepMind, Apache 2.0; see the file header).
 
-## Paper figures (`pubfigs/`)
+## Paper figures
 
-One function per figure (`figN(data_root, out_dir)`, defaults `<repo>/logs` and
-`pubfigs/out/`); `make_all` makes them all. Steps and the figure table:
-[REPRODUCING.md](../REPRODUCING.md).
+The paper's figure scripts (`analysis/pubfigs/`) are in release
+[v0.1.0](https://github.com/jonreal/deep-spine/tree/v0.1.0/analysis/pubfigs), with
+the steps in its
+[REPRODUCING.md](https://github.com/jonreal/deep-spine/blob/v0.1.0/REPRODUCING.md).

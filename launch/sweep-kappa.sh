@@ -1,6 +1,7 @@
 #!/bin/bash
 # Hebbian gain (kappa) sweep: strength x babble grid (10 x 10) at kappa 1-4
 # and 10, in the SR0-MR0 body. Kappa 5 is the SR0-MR0 embodiment sweep.
+# The paper ran this exact grid; the paper version is in release v0.1.0.
 #
 # Usage (repo root, environment active):
 #   ./launch/sweep-kappa.sh                      # 500 runs

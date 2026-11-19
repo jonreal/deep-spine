@@ -1,6 +1,9 @@
 #!/bin/bash
 # Canonical run (SR0-MR0, kappa 5, strength 0.2, babble 0.0046, seed 1) with
-# per-step logs and video, then the per-step Hebbian update and the SI clips.
+# per-step logs and video, then the per-step Hebbian update.
+#
+# The exact paper version of this launcher, which also cuts Movies S1-S5 with
+# the paper's movie scripts, is in release v0.1.0 (see the README).
 #
 # The frame rate is set in a copy of configs/babble.json, not with --custom
 # or --show: those print the overrides onto the video.
@@ -13,8 +16,6 @@
 #   data.txt, env.txt, hebbian.txt     simulation and per-step logs (~21 GB)
 #   dw_rule.bin                        per-step Hebbian update, Figs 3-4 (~5 GB)
 #   sim.mp4                            full run at 10x real time (~20 GB)
-#   si-clips/si-movie-full.mp4         Movie S1 (2000x time-lapse of the whole run)
-#   si-clips/si-movie-{start,early,late,end}.mp4   Movies S2-S5 (20 s, real time)
 #
 # 2000 episodes = 50 h simulated; about 18 h wall clock with video. Stop it
 # with Ctrl-C in this terminal (not under parallel) so the video is finalized.
@@ -47,5 +48,6 @@ RUN="$LOG_ROOT/$(ls "$LOG_ROOT" | grep -E '^[0-9]+$' | sort -n | tail -1)"
 echo "run: $RUN"
 
 python analysis/export_dw_rule.py "$RUN"
-python analysis/pubfigs/cut_movies.py "$RUN/sim.mp4" "$RUN/si-clips"
-python analysis/pubfigs/timelapse_movie.py "$RUN/sim.mp4" "$RUN/si-clips/si-movie-full.mp4"
+# Paper movies (Movies S1-S5): scripts are in release v0.1.0, analysis/pubfigs/
+# python analysis/pubfigs/cut_movies.py "$RUN/sim.mp4" "$RUN/si-clips"
+# python analysis/pubfigs/timelapse_movie.py "$RUN/sim.mp4" "$RUN/si-clips/si-movie-full.mp4"

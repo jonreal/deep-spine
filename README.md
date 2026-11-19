@@ -15,8 +15,10 @@ arm while muscle strength ramps up (bottom); the Ia→MN weight matrix (top left
 white = 0, red = 1) self-organizes from small random weights into homonymous
 reflexes and synergist connections.</em></p>
 
-> **To reproduce the results of the accompanying paper, see
-> [REPRODUCING.md](REPRODUCING.md).**
+> **To reproduce the paper ([arXiv:2611.23441](https://arxiv.org/abs/2611.23441)),
+> use release [v0.1.0](https://github.com/jonreal/deep-spine/tree/v0.1.0)
+> (`git checkout v0.1.0`) and follow its
+> [REPRODUCING.md](https://github.com/jonreal/deep-spine/blob/v0.1.0/REPRODUCING.md).**
 
 - **Plant:** designed for MuJoCo models with muscle actuators: the spine sizes
   itself from the model's muscles and reads their lengths, velocities and forces
@@ -85,11 +87,28 @@ Each run writes to `<log_dir>/<sim-id>/` (sim ID = start time in seconds):
 | `sim.mp4` | video (with `--show` or a `frame_rate` in the config) |
 | `runtime.log` | console output |
 
-Quick installation check (10 minutes on 23 cores; 200 short runs):
+### A small sweep
+
+A sweep is a loop over `--custom` overrides of one config. Nine short runs
+(strength × babble probability, 10 episodes each):
 
 ```bash
-./launch/test-sweep.sh       # -> logs/test-sweep/
+for s in 0.2 0.5 0.9; do
+  for pb in 0.001 0.0046 0.02; do
+    deep-spine --config configs/babble.json --custom "{
+      \"log_dir\": \"./logs/my-sweep\",
+      \"options\": {\"num_eps\": 10, \"max_muscle_strength\": $s},
+      \"supraspine_kwargs\": {\"babble_max_prob\": $pb}}"
+  done
+done
 ```
+
+Each run lands in `logs/my-sweep/<sim-id>/`; summarize the folder with the
+analysis pipeline ([analysis/README.md](analysis/README.md)).
+
+For larger sweeps, `launch/` has parallel launchers (GNU parallel). As an
+installation check, `./launch/test-sweep.sh` runs 200 short simulations into
+`logs/test-sweep/` (about 10 minutes on 23 cores).
 
 ## Configuration
 
@@ -123,16 +142,17 @@ Python export scripts: see [analysis/README.md](analysis/README.md).
 
 ## Reproducing the paper
 
-Simulations, analysis and figures for the accompanying paper:
-[REPRODUCING.md](REPRODUCING.md).
+The exact code, launchers and figure scripts used for the paper are in release
+[v0.1.0](https://github.com/jonreal/deep-spine/tree/v0.1.0); see its
+[REPRODUCING.md](https://github.com/jonreal/deep-spine/blob/v0.1.0/REPRODUCING.md).
 
 ## Layout
 
 ```
 deep_spine/      simulation package (environments, spine, supraspine, hebbian, utils)
 configs/         example configurations
-launch/          sweep launchers
-analysis/        analysis library and paper figure scripts
+launch/          parallel sweep launchers (GNU parallel)
+analysis/        analysis library (MATLAB) and export scripts (Python)
 logs/            simulation output (not tracked)
 ```
 

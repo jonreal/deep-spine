@@ -1,5 +1,6 @@
 #!/bin/bash
 # Embodiment sweep: strength x babble grid (10 x 10) for each body.
+# The paper ran this exact grid; the paper version is in release v0.1.0.
 #
 #   SR = strength ratio, relative_muscle_scale over [SF SE EF EE BF BE]
 #   MR = mass ratio, body_mass over [ground, upper arm, forearm, hand]

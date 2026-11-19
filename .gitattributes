@@ -1,3 +1,0 @@
-# Leave the paper figure scripts out of GitHub's language statistics (they are
-# layout-heavy MATLAB specific to the paper); the files are unaffected.
-analysis/pubfigs/** linguist-detectable=false
